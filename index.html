@@ -98,6 +98,10 @@
   .key{
     width:84px; height:84px; border-radius:12px; font-weight:800; font-size:24px
   }
+  .key.armed{
+    background-color:#cce5ff; border-color:var(--sel); box-shadow:0 0 0 2px var(--sel) inset;
+    transform:scale(.98);
+  }
   .key.x{color:#444}
   /* ダイアログ */
   dialog{border:none; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.25); padding:16px 18px; max-width:min(720px,92vw)}
@@ -264,7 +268,11 @@ let rowClues=[], colClues=[];
 let player = Array.from({length:ROWS},()=>Array(COLS).fill(0)); // 0空/1黒/2×
 let cells=[];
 let selR=0, selC=0, prevSelR=0, prevSelC=0;
-let currentId = null;
+let currentId = null; // 現在のパズルID
+
+let armed = false; // 描画モードがONか（アクションボタン押しっぱなし等）
+let currentAction = 'none'; // 'fill', 'x', 'clear'
+
 
 const undoStack=[], redoStack=[];
 function snapshot(){return JSON.stringify(player)}
@@ -364,16 +372,41 @@ function updateRowColHL(){
 }
 
 /* ==================== ストローク（Undo単位） ==================== */
-let strokeActive=false, strokeAction=null, strokeStartedSnapshot=null;
-function beginStroke(action){
+let strokeActive=false, strokeStartedSnapshot=null;
+function beginStroke(){
   if(strokeActive) return;
-  strokeActive=true; strokeAction=action; strokeStartedSnapshot=snapshot();
+  strokeActive=true; strokeStartedSnapshot=snapshot();
 }
 function commitStroke(){
   if(!strokeActive) return;
   const before = strokeStartedSnapshot, after=snapshot();
-  strokeActive=false; strokeAction=null; strokeStartedSnapshot=null;
+  strokeActive=false; strokeStartedSnapshot=null;
   if(before!==after){ pushUndo(before); saveLSDebounced(); }
+}
+
+/* ==================== 入力武装（Arm/Disarm） ==================== */
+// アクションボタンやキーの「押しっぱなし」状態を管理し、連続描画を実現する
+function arm(action) {
+  if (armed) return;
+  armed = true;
+  currentAction = action;
+  beginStroke();
+  updateArmedStateUI();
+}
+
+function disarm() {
+  if (!armed) return;
+  armed = false;
+  currentAction = 'none';
+  commitStroke();
+  updateArmedStateUI();
+}
+
+function updateArmedStateUI() {
+  fillBtn.classList.toggle('armed', armed && currentAction === 'fill');
+  xBtn.classList.toggle('armed', armed && currentAction === 'x');
+  fillBtn.setAttribute('aria-pressed', String(armed && currentAction === 'fill'));
+  xBtn.setAttribute('aria-pressed', String(armed && currentAction === 'x'));
 }
 
 /* ==================== 入力適用 ==================== */
@@ -385,57 +418,58 @@ function applyCell(r,c,action){
 }
 
 /* ドラッグ */
-let dragging=false;
 boardEl.addEventListener('pointerdown',(e)=>{
   const t=e.target.closest('.cell'); if(!t) return;
-  const r=+t.dataset.r, c=+t.dataset.c; boardEl.setPointerCapture(e.pointerId); dragging=true;
-  const cur=player[r][c];
-  if(cur===0){
-    if(e.button===2){ strokeAction='x'; }
-    else if(e.button===0 && e.altKey){ strokeAction='clear'; }
-    else{ strokeAction='fill'; }
-  }else{ strokeAction='clear'; }
-  beginStroke(strokeAction); setSelected(r,c); applyCell(r,c,strokeAction);
+  boardEl.setPointerCapture(e.pointerId);
+  const r=+t.dataset.r, c=+t.dataset.c;
+  setSelected(r,c);
+
+  const currentVal = player[r][c];
+  let action = 'none';
+  if (e.button === 2) { // 右クリック
+    action = (currentVal === 0) ? 'x' : 'clear';
+  } else {
+    action = (currentVal === 0) ? 'fill' : 'clear';
+  }
+  arm(action);
+  applyCell(r, c, currentAction);
 });
 boardEl.addEventListener('pointermove',(e)=>{
-  if(!dragging) return;
+  if(!armed) return;
   const t=document.elementFromPoint(e.clientX,e.clientY)?.closest('.cell'); if(!t || !boardEl.contains(t)) return;
-  const r=+t.dataset.r, c=+t.dataset.c; setSelected(r,c); applyCell(r,c,strokeAction);
+  const r=+t.dataset.r, c=+t.dataset.c;
+  setSelected(r,c);
+  applyCell(r,c,currentAction);
 });
-function endDrag(e){ if(dragging){ dragging=false; commitStroke(); } if(e) boardEl.releasePointerCapture?.(e.pointerId); }
-boardEl.addEventListener('pointerup',endDrag);
-boardEl.addEventListener('pointercancel',endDrag);
 boardEl.addEventListener('contextmenu',e=>e.preventDefault());
 
 /* キーボード */
-let holding=false;
 boardEl.addEventListener('keydown',e=>{
   if(e.key.startsWith('Arrow')){
     e.preventDefault();
+    const r=selR, c=selC;
     if(e.key==='ArrowUp') setSelected(Math.max(0,selR-1),selC);
     if(e.key==='ArrowDown') setSelected(Math.min(ROWS-1,selR+1),selC);
     if(e.key==='ArrowLeft') setSelected(selR,Math.max(0,selC-1));
     if(e.key==='ArrowRight') setSelected(selR,Math.min(COLS-1,selC+1));
-    if(holding && strokeActive){ applyCell(selR,selC,strokeAction); }
+    if(armed){ applyCell(selR,selC,currentAction); }
     checkAll(); return;
   }
   if(e.key===' '||e.key==='Enter'){ e.preventDefault();
-    if(!holding){ holding=true; strokeAction=(player[selR][selC]===0)?'fill':'clear'; beginStroke(strokeAction); applyCell(selR,selC,strokeAction); }
+    if(!armed){ arm((player[selR][selC]===0)?'fill':'clear'); applyCell(selR,selC,currentAction); }
     return;
   }
   if(e.key.toLowerCase()==='x'){ e.preventDefault();
-    if(!holding){ holding=true; strokeAction=(player[selR][selC]===0)?'x':'clear'; beginStroke(strokeAction); applyCell(selR,selC,strokeAction); }
+    if(!armed){ arm((player[selR][selC]===0)?'x':'clear'); applyCell(selR,selC,currentAction); }
     return;
   }
-  if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); beginStroke('clear'); applyCell(selR,selC,'clear'); commitStroke(); return; }
+  if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); arm('clear'); applyCell(selR,selC,'clear'); disarm(); return; }
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); doUndo(); return; }
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='y'){ e.preventDefault(); doRedo(); return; }
-  if(e.key==='Escape'){ if(holding){ holding=false; commitStroke(); } return; }
+  if(e.key==='Escape'){ if(armed){ disarm(); } return; }
 });
 window.addEventListener('keyup',e=>{
-  if((e.key===' '||e.key==='Enter'||e.key.toLowerCase()==='x') && holding){
-    holding=false; commitStroke();
-  }
+  if((e.key===' '||e.key==='Enter'||e.key.toLowerCase()==='x') && armed){ disarm(); }
 });
 
 /* D-Pad 長押しオートリピート */
@@ -444,23 +478,29 @@ function withRepeat(el, onFire){
   const fire=()=>onFire();
   el.addEventListener('pointerdown', e=>{
     e.preventDefault(); fire();
-    timer=setTimeout(()=>{ rep=setInterval(fire, REPEAT_STEP); }, REPEAT_DELAY);
+    timer=setTimeout(()=>{ rep=setInterval(fire, REPEAT_STEP); }, REPEAT_DELAY); // 連続移動開始
   });
   const stop=()=>{
     clearTimeout(timer); timer=null; clearInterval(rep); rep=null;
-    commitStroke();
+    // D-Padから指を離しても武装は解除しない。アクションボタンが押されている限り有効。
+    // ストロークのコミットもアクションボタン側やグローバルなupイベントに任せる。
   };
   el.addEventListener('pointerup',stop);
   el.addEventListener('pointercancel',stop);
   el.addEventListener('pointerleave',stop);
 }
-withRepeat(upBtn,   ()=>{ setSelected(Math.max(0,selR-1),selC); if(holding && strokeActive){ applyCell(selR,selC,strokeAction);} });
-withRepeat(downBtn, ()=>{ setSelected(Math.min(ROWS-1,selR+1),selC); if(holding && strokeActive){ applyCell(selR,selC,strokeAction);} });
-withRepeat(leftBtn, ()=>{ setSelected(selR,Math.max(0,selC-1)); if(holding && strokeActive){ applyCell(selR,selC,strokeAction);} });
-withRepeat(rightBtn,()=>{ setSelected(selR,Math.min(COLS-1,selC+1)); if(holding && strokeActive){ applyCell(selR,selC,strokeAction);} });
+withRepeat(upBtn,   ()=>{ setSelected(Math.max(0,selR-1),selC); if(armed) applyCell(selR,selC,currentAction); });
+withRepeat(downBtn, ()=>{ setSelected(Math.min(ROWS-1,selR+1),selC); if(armed) applyCell(selR,selC,currentAction); });
+withRepeat(leftBtn, ()=>{ setSelected(selR,Math.max(0,selC-1)); if(armed) applyCell(selR,selC,currentAction); });
+withRepeat(rightBtn,()=>{ setSelected(selR,Math.min(COLS-1,selC+1)); if(armed) applyCell(selR,selC,currentAction); });
 
-withRepeat(fillBtn,  ()=>{ holding=true; strokeAction=(player[selR][selC]===0)?'fill':'clear'; if(!strokeActive) beginStroke(strokeAction); applyCell(selR,selC,strokeAction); });
-withRepeat(xBtn,     ()=>{ holding=true; strokeAction=(player[selR][selC]===0)?'x':'clear';    if(!strokeActive) beginStroke(strokeAction); applyCell(selR,selC,strokeAction); });
+// アクションボタンは「押しっぱなしで武装」するモードへ変更
+fillBtn.addEventListener('pointerdown', e => { e.preventDefault(); boardEl.focus(); arm((player[selR][selC]===0)?'fill':'clear'); applyCell(selR,selC,currentAction); });
+xBtn.addEventListener('pointerdown', e => { e.preventDefault(); boardEl.focus(); arm((player[selR][selC]===0)?'x':'clear'); applyCell(selR,selC,currentAction); });
+
+// グローバルなポインタアップで武装解除（どのボタンから指が離れてもOK）
+window.addEventListener('pointerup', e => { if(armed) disarm(); if(e.pointerId) boardEl.releasePointerCapture?.(e.pointerId); });
+window.addEventListener('pointercancel', e => { if(armed) disarm(); if(e.pointerId) boardEl.releasePointerCapture?.(e.pointerId); });
 
 /* ==================== エラー/達成チェック ==================== */
 function getLineValues(isRow, idx){
