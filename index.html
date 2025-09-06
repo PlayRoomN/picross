@@ -6,7 +6,7 @@
 <title>Picross 20×20 — 同一UI（PC/Tablet/Phone）</title>
 <style>
   :root{
-    --cell:32px;      /* セル基本サイズ（スライダで変更可） */
+    --cell:32px;      /* セル基本サイズ（スライダで変更可／初期は自動フィットで上書き） */
     --gap:2px;
     --line:#999;
     --fill:#111;
@@ -102,7 +102,6 @@
   .key.x{color:#444}
   .key.clear{background:#fff}
   .util{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
-  .util .btn{height:48px; border-radius:12px}
   .meter{min-width:90px; text-align:center; font-weight:700}
 
   /* ダイアログ */
@@ -117,10 +116,24 @@
   .grow{flex:1}
 
   /* クリア演出 */
-  @keyframes boardCelebrate{0%{transform:scale(1)} 15%{transform:scale(1.03)} 100%{transform:scale(1)}}
+  @keyframes boardCelebrate{0%{transform:scale(1)} 15%{transform:scale(1.03)} 100%{transform:scale(1)}
+  }
   .board.celebrate{animation:boardCelebrate 800ms ease}
   @keyframes cellPop{0%{transform:scale(.9); filter:brightness(1.1)} 70%{transform:scale(1.02)} 100%{transform:scale(1); filter:brightness(1)}}
   .cell.pop{animation:cellPop 320ms ease forwards}
+
+  /* ===== 画面が狭すぎる場合のオーバーレイ ===== */
+  .overlay{
+    display:none; position:fixed; z-index:11; inset:0;
+    background:rgba(255,255,255,.92);
+    align-items:center; justify-content:center; text-align:center;
+    padding:2rem; color:#111
+  }
+  .overlay .box{
+    border:1px solid #ddd; border-radius:12px; background:#fff; padding:1rem 1.25rem; max-width:min(520px,92vw)
+  }
+  .overlay h3{margin:.25rem 0 .5rem; font-size:1.1rem}
+  .overlay p{margin:.25rem 0; color:#333}
 </style>
 </head>
 <body>
@@ -142,7 +155,6 @@
     <span id="progress" class="stat">一致率: 0%</span>
     <span class="seg"></span>
     <button id="helpBtn" class="btn">遊び方</button>
-    <button id="pngBtn" class="btn">PNG保存</button>
   </div>
 
   <div class="stage">
@@ -184,6 +196,15 @@
     </div>
   </div>
 
+  <!-- 画面が狭すぎる場合のオーバーレイ -->
+  <div id="tooSmall" class="overlay" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="box">
+      <h3>プレイ不可（画面が狭すぎます）</h3>
+      <p>初期表示で「盤面＋行列ヒント」が収まりませんでした。</p>
+      <p>画面サイズを広げるか、別の端末／向きをお試しください。</p>
+    </div>
+  </div>
+
   <!-- 一覧ダイアログ -->
   <dialog id="listDlg" aria-labelledby="listTitle">
     <p id="listTitle" class="dlg-title">パズル一覧（20×20）</p>
@@ -216,261 +237,21 @@ const LS_LAST_ID="picross-20x20-lastid";
 const REPEAT_DELAY=280;   // 長押し開始(ms)
 const REPEAT_STEP=45;     // 長押し間隔(ms)
 
-/* ==================== パズル定義（20×20 / 10種） ==================== */
-/* 可読性のため " .# "文字列20行をマップ化（#=黒, .=空白）
-   絵柄：Heart / Smiley / Arrow / Star / House / Diamond / Note / LetterA / Invader / Check */
-const PUZZLES = [
-  {
-    id:"heart",
-    title:"ハート",
-    art:[
-".....####....####.....",
-"....######..######....",
-"...################...",
-"..##################..",
-"..##################..",
-"..##################..",
-"...################...",
-"....##############....",
-".....############.....",
-"......##########......",
-".......########.......",
-"........######........",
-".........####.........",
-".........####.........",
-"..........##..........",
-"..........##..........",
-"......................",
-"......................",
-"......................",
-"......................"
-] },
-{
-  id:"smiley",
-    title:"スマイリー",
-    art:[
-"......................",
-"......############....",
-"....################..",
-"...#################..",
-"..########....#######.",
-"..#######......######.",
-".#######........#####.",
-".######..........####.",
-".#####...##..##...###.",
-".#####...##..##...###.",
-".#####............###.",
-".#####..########..###.",
-".######.########.####.",
-".#######.######.#####.",
-"..##################..",
-"...################...",
-"....##############....",
-"......##########......",
-"......................",
-"......................"
-]},
-{
-  id:"arrow",
-  title:"矢印（→）",
-  art:[
-"......................",
-".............###......",
-"............####......",
-"...........#####......",
-"..........######......",
-".........#######......",
-"###################...",
-"###########.#######...",
-".........#######......",
-"..........######......",
-"...........#####......",
-"............####......",
-".............###......",
-"......................",
-"......................",
-"......................",
-"......................",
-"......................",
-"......................",
-"......................"
-]},
-{
-  id:"star",
-  title:"スター",
-  art:[
-"......................",
-"..........##..........",
-"..........##..........",
-".........####.........",
-"..##.....####.....##..",
-"..###....####....###..",
-"...###...####...###...",
-"....###..####..###....",
-"#####.##########.#####",
-"######################",
-"#####.##########.#####",
-"....###..####..###....",
-"...###...####...###...",
-"..###....####....###..",
-"..##.....####.....##..",
-".........####.........",
-"..........##..........",
-"..........##..........",
-"......................",
-"......................"
-]},
-{
-  id:"house",
-  title:"家",
-  art:[
-"......................",
-".........####.........",
-"........######........",
-".......########.......",
-"......##########......",
-".....############.....",
-"....##############....",
-"...################...",
-"..##################..",
-"..#######....#######..",
-"..######......######..",
-"..######.####.######..",
-"..######.####.######..",
-"..######.####.######..",
-"..######.####.######..",
-"..######.####.######..",
-"..######.####.######..",
-"..##################..",
-"..##################..",
-"......................"
-]},
-{
-  id:"diamond",
-  title:"ダイヤ",
-  art:[
-"......................",
-"..........##..........",
-".........####.........",
-"........######........",
-".......########.......",
-"......##########......",
-".....############.....",
-"....##############....",
-"...################...",
-"..##################..",
-"...################...",
-"....##############....",
-".....############.....",
-"......##########......",
-".......########.......",
-"........######........",
-".........####.........",
-"..........##..........",
-"......................",
-"......................"
-]},
-{
-  id:"note",
-  title:"音符",
-  art:[
-"......................",
-"......................",
-"......................",
-".....#########........",
-".....#########........",
-".....#########........",
-".....#########........",
-".....#########....####",
-".....#########...#####",
-".....#########..######",
-".....#########..######",
-".....#########..######",
-".....#########..######",
-".....#########..######",
-"...###########..######",
-"..###########...#####.",
-"..##########....####..",
-"..######..........#...",
-"..####...............",
-"..###................"
-]},
-{
-  id:"letterA",
-  title:"文字A",
-  art:[
-"......................",
-".........######.......",
-"........########......",
-".......##########.....",
-"......####....####....",
-".....####......####...",
-".....###........###...",
-"....###..........###..",
-"...###............###.",
-"...#################..",
-"..###################.",
-"..###............###..",
-"..###............###..",
-"..###............###..",
-"..###............###..",
-"..###............###..",
-"..###............###..",
-"......................",
-"......................",
-"......................"
-]},
-{
-  id:"invader",
-  title:"インベーダー風",
-  art:[
-"......................",
-"......############....",
-".....##############...",
-"....###..######..###..",
-"...###..########..###.",
-"...###.##########.###.",
-"...##################.",
-"...##..###.##.###..##.",
-"...##..###.##.###..##.",
-"...##################.",
-"....###..######..###..",
-".....###..####..###...",
-"..##..###.####.###..##",
-"..##..###.####.###..##",
-"..##################..",
-"...####..........####.",
-"...#..#..........#..#.",
-"...#..#..........#..#.",
-"......................",
-"......................"
-]},
-{
-  id:"check",
-  title:"チェックマーク",
-  art:[
-"......................",
-"......................",
-"..................##..",
-".................###..",
-"................###...",
-"...............###....",
-"..............###.....",
-".....##......###......",
-".....###....###.......",
-"......###..###........",
-".......######.........",
-"........#####.........",
-".........####.........",
-"..........###.........",
-"...........##.........",
-"............#.........",
-"......................",
-"......................",
-"......................",
-"......................"
-]}
-];
+/* ===== 自動フィット用の定数 ===== */
+const MIN_CELL = 24;
+const MAX_CELL = 46;
+const STEP_CELL = 2;
+const SAFETY_W = 8;  // 幅の安全マージン（スクロールバー等の誤差対策）
+const SAFETY_H = 8;  // 高さの安全マージン
+
+/* ==================== パズル外部読込 ==================== */
+let PUZZLES = [];
+async function loadPuzzles(){
+  const res = await fetch('puzzles.json', { cache: 'no-store' });
+  if(!res.ok){ throw new Error('puzzles.json の読み込みに失敗しました'); }
+  PUZZLES = await res.json();
+  if(!Array.isArray(PUZZLES) || PUZZLES.length===0){ throw new Error('puzzles.json が空です'); }
+}
 
 /* ==================== 便利関数 ==================== */
 const byId = (id)=>document.getElementById(id);
@@ -486,7 +267,7 @@ function strToGrid(lines){ // 20行の'.#'を0/1へ
 const topEl=byId('top'), leftEl=byId('left'), boardEl=byId('board');
 const progressEl=byId('progress'), meterEl=byId('meter');
 const undoBtn=byId('undoBtn'), redoBtn=byId('redoBtn'), resetBtn=byId('resetBtn');
-const checkBtn=byId('checkBtn'), pngBtn=byId('pngBtn');
+const checkBtn=byId('checkBtn');
 const newBtn=byId('newBtn'), randBtn=byId('randBtn'), listBtn=byId('listBtn');
 const helpBtn=byId('helpBtn'), helpDlg=byId('helpDlg'), helpClose=byId('helpClose');
 const listDlg=byId('listDlg'), listWrap=byId('listWrap'), listClose=byId('listClose');
@@ -496,7 +277,7 @@ const upBtn=byId('upBtn'), downBtn=byId('downBtn'), leftBtn=byId('leftBtn'), rig
 const fillBtn=byId('fillBtn'), xBtn=byId('xBtn'), clearBtn=byId('clearBtn');
 
 /* ==================== 状態 ==================== */
-let solution = strToGrid(PUZZLES[0].art);
+let solution = Array.from({length:ROWS},()=>Array(COLS).fill(0));
 let rowClues=[], colClues=[];
 let player = Array.from({length:ROWS},()=>Array(COLS).fill(0)); // 0空/1黒/2×
 let cells=[];
@@ -717,6 +498,62 @@ function segLen(seg){return seg[1]-seg[0]+1}
 
 function clearHintState(el){ el.classList.remove('hintError'); [...el.children].forEach(n=> n.classList.remove('error','done')); }
 
+function getPossibleRanges(hints, vals) {
+    const numHints = hints.length;
+    const lineLen = vals.length;
+    if (numHints === 0 || (numHints === 1 && hints[0] === 0)) {
+        return { L: [], Rend: [] };
+    }
+
+    const L = new Array(numHints); // 左詰め開始位置
+    const R = new Array(numHints); // 右詰め開始位置
+
+    // --- L (左詰め) の計算 ---
+    let currentPosL = 0;
+    for (let i = 0; i < numHints; i++) {
+        const hintLen = hints[i];
+        if (i > 0) {
+            // 前のヒントの終了位置 + ギャップ
+            currentPosL = L[i - 1] + hints[i - 1] + 1;
+        }
+        
+        while (true) {
+            const endPos = currentPosL + hintLen - 1;
+            if (endPos >= lineLen) { L[i] = lineLen; break; } // 配置不可
+            
+            let hasX = false;
+            for (let k = currentPosL; k <= endPos; k++) {
+                if (vals[k] === 2) { hasX = true; currentPosL = k + 1; break; }
+            }
+            if (!hasX) { L[i] = currentPosL; break; }
+        }
+    }
+
+    // --- R (右詰め) の計算 ---
+    let currentPosR = lineLen - 1;
+    for (let i = numHints - 1; i >= 0; i--) {
+        const hintLen = hints[i];
+        if (i < numHints - 1) {
+            // 次のヒントの開始位置 - ギャップ
+            currentPosR = R[i + 1] - 1 - 1;
+        }
+
+        while (true) {
+            const startPos = currentPosR - hintLen + 1;
+            if (startPos < 0) { R[i] = -1; break; } // 配置不可
+
+            let hasX = false;
+            for (let k = startPos; k <= currentPosR; k++) {
+                if (vals[k] === 2) { hasX = true; currentPosR = k - 1; break; }
+            }
+            if (!hasX) { R[i] = startPos; break; }
+        }
+    }
+    
+    const Rend = R.map((start, i) => (start === -1) ? -1 : start + hints[i] - 1);
+    return { L, Rend };
+}
+
 function evalLine(isRow, idx, hints, hintEl){
   clearHintState(hintEl);
   const vals=getLineValues(isRow,idx);
@@ -731,11 +568,19 @@ function evalLine(isRow, idx, hints, hintEl){
   let lineError=false;
   const perHintError=new Array(hints.length).fill(false);
 
-  if((onesRuns.length>1 || onesRuns[0]!==0) && onesRuns.length>hints.length) lineError=true; // 黒塊数過剰
-  if(onesCount>hintSum) lineError=true;                              // 合計超過
-  if(maxv(onesRuns)>hintMax) lineError=true;                         // 連続超過
+  /* 塊数過剰は「Xで分断された確定黒ブロック数」で判定（未確定0では分断扱いしない） */
+  const groupsByX = segs.filter(([s,e])=>{
+    for(let i=s;i<=e;i++){ if(vals[i]===1) return true; }
+    return false;
+  }).length;
+  if(groupsByX > hints.length) lineError = true;
 
-  for(let i=0;i<hints.length;i++){ // 伸びしろ不足/置場消滅
+  /* 合計超過／連続長超過（確定矛盾） */
+  if(onesCount>hintSum) lineError=true;
+  if(maxv(onesRuns)>hintMax) lineError=true;
+
+  /* 置場消滅（そのヒント数字だけ赤） */
+  for(let i=0;i<hints.length;i++){
     const h=hints[i]; let can=false; for(const seg of segs){ if(segLen(seg)>=h){ can=true; break; } }
     if(!can) perHintError[i]=true;
   }
@@ -744,6 +589,63 @@ function evalLine(isRow, idx, hints, hintEl){
   else{ [...hintEl.children].forEach((n,i)=>{ if(perHintError[i]) n.classList.add('error'); }); }
 
   if(!lineError && done){ [...hintEl.children].forEach(n=>{ n.classList.remove('error'); n.classList.add('done'); }); }
+
+  /* ===== 追加：数字ごとの「部分確定」判定 ===== */
+  if(!lineError && !done){
+    const hintChildren=[...hintEl.children];
+    const used = new Array(hints.length).fill(false);
+
+    // 1. ヒントの取りうる配置範囲を計算
+    const { L, Rend } = getPossibleRanges(hints, vals);
+
+    // 2. 確定した黒ブロックを抽出
+    const blackBlocks=[];
+    for(let i=0;i<vals.length;i++){
+      if(vals[i]===1){
+        let j=i; while(j+1<vals.length && vals[j+1]===1) j++;
+        blackBlocks.push([i,j]); i=j;
+      }
+    }
+
+    // ヘルパー関数
+    const noZeroInRange=(a,b)=>{ if(a>b) return true; for(let k=a;k<=b;k++){ if(vals[k]===0) return false; } return true; };
+    const prevWall=(pos)=>{ for(let k=pos;k>=0;k--){ if(vals[k]===2) return k; } return -1; };
+    const nextWall=(pos)=>{ for(let k=pos;k<vals.length;k++){ if(vals[k]===2) return k; } return vals.length; };
+
+    // 3. 確定ブロックをヒントに割り当て
+    for(const [s,e] of blackBlocks){
+      const p = prevWall(s-1);
+      const q = nextWall(e+1);
+
+      // 壁から黒ブロックまでの「内側」の区間がすべて埋まっているか
+      const innerLeftFilled  = noZeroInRange(p + 1, s - 1);
+      const innerRightFilled = noZeroInRange(e + 1, q - 1);
+
+      // 壁の「外側」が確定しているか（盤の端まで0がないか）
+      const outerLeftFixed = (p === -1) ? true : noZeroInRange(0, p - 1);
+      const outerRightFixed = (q === vals.length) ? true : noZeroInRange(q + 1, vals.length - 1);
+
+      // ブロックの左右がそれぞれ確定しているか（内側と外側の両方が埋まっている必要がある）
+      const isLeftFixed = innerLeftFilled && outerLeftFixed;
+      const isRightFixed = innerRightFilled && outerRightFixed;
+
+      // ブロック全体が確定しているのは、左右両方が確定している場合のみ
+      if(!(isLeftFixed && isRightFixed)) continue;
+
+      const len = e - s + 1;
+
+      // この確定ブロックに合致する未使用ヒントを探す
+      for(let hIdx=0; hIdx<hints.length; hIdx++){
+        if(used[hIdx]) continue;
+        // 長さ一致 ＆ 位置整合性チェック
+        if(hints[hIdx] === len && s >= L[hIdx] && e <= Rend[hIdx]){
+          used[hIdx]=true;
+          hintChildren[hIdx]?.classList.add('done');
+          break; // このブロックの割り当ては完了
+        }
+      }
+    }
+  }
 }
 
 function checkClues(){
@@ -808,35 +710,6 @@ function loadLS(){
   return false;
 }
 
-/* ==================== PNG保存 ==================== */
-function savePNG(){
-  const scale=2, pad=8;
-  const cell=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cell'))||32;
-  const gap=2, W=COLS*cell+(COLS-1)*gap+pad*2, H=ROWS*cell+(ROWS-1)*gap+pad*2;
-  const canvas=document.createElement('canvas'); canvas.width=W*scale; canvas.height=H*scale;
-  const ctx=canvas.getContext('2d'); ctx.scale(scale,scale);
-  ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,W,H);
-  for(let r=0;r<ROWS;r++){
-    for(let c=0;c<COLS;c++){
-      const x=pad + c*(cell+gap), y=pad + r*(cell+gap);
-      ctx.fillStyle=(player[r][c]===1)?"#111111":"#ffffff";
-      ctx.fillRect(x,y,cell,cell);
-      if(player[r][c]===2){
-        ctx.strokeStyle="#666666"; ctx.lineWidth=2;
-        ctx.beginPath(); ctx.moveTo(x+4,y+4); ctx.lineTo(x+cell-4,y+cell-4);
-        ctx.moveTo(x+cell-4,y+4); ctx.lineTo(x+4,y+cell-4); ctx.stroke();
-      }
-      ctx.strokeStyle="#999999"; ctx.lineWidth=1; ctx.strokeRect(x+.5,y+.5,cell-1,cell-1);
-      ctx.strokeStyle="#000000"; ctx.lineWidth=2;
-      if(r%5===0) { ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+cell,y); ctx.stroke(); }
-      if(c%5===0) { ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y+cell); ctx.stroke(); }
-      if(r===ROWS-1){ ctx.beginPath(); ctx.moveTo(x,y+cell); ctx.lineTo(x+cell,y+cell); ctx.stroke(); }
-      if(c===COLS-1){ ctx.beginPath(); ctx.moveTo(x+cell,y); ctx.lineTo(x+cell,y+cell); ctx.stroke(); }
-    }
-  }
-  const a=document.createElement('a'); a.download=`picross_${currentId}.png`; a.href=canvas.toDataURL("image/png"); a.click();
-}
-
 /* ==================== UIイベント ==================== */
 undoBtn.onclick=()=>doUndo();
 redoBtn.onclick=()=>doRedo();
@@ -845,7 +718,6 @@ resetBtn.onclick=()=>{
   commitStroke(); celebrated=false; checkAll(); saveLS();
 };
 checkBtn.onclick=()=>{ progressEl.textContent=getProgressText(); };
-pngBtn.onclick=()=>{ savePNG(); };
 newBtn.onclick=()=>{ loadPuzzleById(currentId); };
 randBtn.onclick=()=>{ randomPuzzle(); };
 helpBtn.onclick=()=> helpDlg.showModal();
@@ -865,9 +737,9 @@ listBtn.onclick=()=>{
   }
   listDlg.showModal();
 };
-listClose.onclick=()=> listDlg.close();
+listClose.onclick = ()=> listDlg.close();
 
-/* セルサイズ */
+/* セルサイズ（手動スライダ） */
 function applyCellSize(px){ document.documentElement.style.setProperty('--cell', px+'px'); cellPx.textContent=px+'px'; }
 (function initCellSize(){
   const saved=parseInt(localStorage.getItem(LS_CELL_KEY)||"",10);
@@ -876,18 +748,68 @@ function applyCellSize(px){ document.documentElement.style.setProperty('--cell',
 })();
 let sizeTimer=null;
 cellSlider.addEventListener('input', ()=>{
+  // 手動操作は尊重（初期表示の「全体が見える」要件はクリア済み）
   applyCellSize(parseInt(cellSlider.value,10));
+  byId('tooSmall').style.display='none'; // 手動サイズ変更時はオーバーレイを閉じる
   clearTimeout(sizeTimer); sizeTimer=setTimeout(()=>{ try{ localStorage.setItem(LS_CELL_KEY, cellSlider.value);}catch{} }, 200);
 });
 
+/* ==================== 初期表示：自動フィット実装 ==================== */
+function getAvailableSize(){
+  const topH = document.querySelector('.topbar')?.offsetHeight || 0;
+  const ctlH = document.querySelector('.control')?.offsetHeight || 0;
+  const width  = Math.max(0, window.innerWidth  - SAFETY_W);
+  const height = Math.max(0, window.innerHeight - (topH + ctlH + SAFETY_H));
+  return {width, height};
+}
+
+function fitsAt(px){
+  applyCellSize(px); // CSS変数を即時反映
+  const wrap = document.querySelector('.wrap');
+  if(!wrap) return false;
+  const rect = wrap.getBoundingClientRect();
+  const avail = getAvailableSize();
+  return rect.width <= avail.width && rect.height <= avail.height;
+}
+
+function fitInitialView(){
+  const overlay = byId('tooSmall');
+  let chosen = null;
+  // 大きい方から試して、収まる最大pxを採用
+  for(let px=MAX_CELL; px>=MIN_CELL; px-=STEP_CELL){
+    if(fitsAt(px)){ chosen = px; break; }
+  }
+  if(chosen !== null){
+    overlay.style.display='none';
+    applyCellSize(chosen);
+    // スライダー・LSにも反映（次回起動時の初期値として使う）
+    cellSlider.value = String(chosen);
+    try{ localStorage.setItem(LS_CELL_KEY, String(chosen)); }catch{}
+  }else{
+    // どのサイズでも収まらない → プレイ不可の表示
+    overlay.style.display='flex';
+  }
+}
+
 /* ==================== 起動 ==================== */
-(function boot(){
-  // 直前のパズルを復元 or 既定
+(async function boot(){
+  try{
+    await loadPuzzles();
+  }catch(e){
+    alert(e.message || 'パズルデータの読み込みに失敗しました');
+    return;
+  }
+
   const last=localStorage.getItem(LS_LAST_ID);
-  loadPuzzleById(last||PUZZLES[0].id);
+  loadPuzzleById(last || PUZZLES[0].id);
   setSelected(0,0); boardEl.focus();
+
+  // 初期表示：盤面＋行列ヒントが必ず見えるよう自動フィット
+  requestAnimationFrame(()=>fitInitialView());
+
   setInterval(refreshButtons, 400);
 })();
+
 </script>
 </body>
 </html>
