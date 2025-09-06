@@ -2,389 +2,672 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>10×10 ピクロス（Ver0.5 / タブレット統一操作＋大型ボタン）</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Picross 20×20 — 同一UI（PC/Tablet/Phone）</title>
 <style>
-  :root{ --cell:34px; --gap:2px; --line:#999; --fill:#111; --x:#666; --sel:#2b8cff; }
+  :root{
+    --cell:32px;      /* セル基本サイズ（スライダで変更可） */
+    --gap:2px;
+    --line:#999;
+    --fill:#111;
+    --x:#666;
+    --sel:#2b8cff;
+    --ui-bg:rgba(255,255,255,.9);
+    --ui-br:#c9c9c9;
+  }
+  html,body{height:100%}
+  body{margin:0;background:#fafafa;color:#222;
+       font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Meiryo,sans-serif}
 
-  body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Meiryo,sans-serif;background:#fafafa;margin:16px;color:#222}
-  h1{font-size:1.05rem;margin:0 0 .6rem}
-
-  .toolbar{display:flex;gap:8px;margin:.25rem 0 .8rem;flex-wrap:wrap;align-items:center}
-  .btn{padding:.35rem .6rem;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
-  .btn:disabled{opacity:.5;cursor:not-allowed}
-  .range-wrap{display:flex;align-items:center;gap:6px;padding:.25rem .5rem;border:1px solid #bbb;border-radius:6px;background:#fff}
-  .range-wrap label{font-size:.85rem;color:#444}
+  /* ヘッダー */
+  .topbar{
+    position:sticky; top:0; z-index:10;
+    background:#fff; border-bottom:1px solid #e5e5e5;
+    padding:.5rem .75rem; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap
+  }
+  .title{font-weight:700; font-size:1rem; margin-right:.25rem}
+  .btn{
+    padding:.35rem .6rem; border:1px solid var(--ui-br);
+    background:#fff; border-radius:8px; cursor:pointer
+  }
+  .btn:disabled{opacity:.5; cursor:not-allowed}
+  .stat{font-size:.9rem; color:#333}
+  .seg{width:1px; height:22px; background:#e5e5e5; margin:0 .25rem}
+  .range-wrap{display:flex; align-items:center; gap:.5rem;
+    padding:.2rem .5rem; border:1px solid var(--ui-br); border-radius:8px; background:#fff}
   input[type="range"]{accent-color:#2b8cff}
 
-  .wrap{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto 1fr;grid-template-areas:
-        "corner top" "left board";gap:6px;width:max-content;user-select:none}
-  .corner{grid-area:corner;width:calc(var(--cell)*2);height:calc(var(--cell)*2)}
-  .top{grid-area:top;display:grid;grid-template-columns:repeat(10,var(--cell));gap:var(--gap);padding-left:var(--gap)}
-  .left{grid-area:left;display:grid;grid-template-rows:repeat(10,var(--cell));gap:var(--gap);padding-top:var(--gap)}
+  /* メイン2段：上=盤面/ヒント、下=操作 */
+  .stage{display:flex; flex-direction:column; gap:.5rem; padding:.5rem}
+  .wrap{
+    margin:0 auto; width:max-content;
+    display:grid; grid-template-columns:auto 1fr;
+    grid-template-rows:auto 1fr;
+    grid-template-areas:"corner top" "left board";
+    gap:6px; user-select:none; touch-action:manipulation; /* ダブルタップズーム抑制 */
+  }
+  .corner{grid-area:corner; width:calc(var(--cell)*2); height:calc(var(--cell)*2)}
+  .top{grid-area:top; display:grid; grid-template-columns:repeat(20,var(--cell)); gap:var(--gap); padding-left:var(--gap)}
+  .left{grid-area:left; display:grid; grid-template-rows:repeat(20,var(--cell)); gap:var(--gap); padding-top:var(--gap)}
 
-  .colHint,.rowHint{font-weight:bold;font-size:12px;line-height:1.2;color:#222;transition:background-color .12s ease}
-  .colHint{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:calc(var(--cell)*2 + var(--gap))}
-  .rowHint{display:flex;justify-content:flex-end;align-items:center;gap:4px;width:calc(var(--cell)*2 + var(--gap))}
-  .done{color:#aaa;font-weight:normal}
-  .error{color:#d00 !important;}
-  .hintError{outline:2px solid #d00; outline-offset:2px; border-radius:4px;}
-  .hiHint{background:#eaf3ff;border-radius:4px}
+  .colHint,.rowHint{font-weight:700; font-size:12px; line-height:1.2; color:#222; transition:background-color .12s ease}
+  .colHint{display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:calc(var(--cell)*2 + var(--gap))}
+  .rowHint{display:flex; justify-content:flex-end; align-items:center; gap:4px; width:calc(var(--cell)*2 + var(--gap))}
+  .done{color:#aaa; font-weight:normal}
+  .error{color:#d00 !important}
+  .hintError{outline:2px solid #d00; outline-offset:2px; border-radius:4px}
+  .hiHint{background:#eaf3ff; border-radius:4px}
 
-  .board{grid-area:board;display:grid;grid-template-columns:repeat(10,var(--cell));grid-template-rows:repeat(10,var(--cell));
-         gap:var(--gap);background:#ccc;padding:var(--gap);outline:none;transition:transform .2s ease; touch-action:none}
-  .cell{width:var(--cell);height:var(--cell);background:#fff;border:1px solid #999;
-        display:flex;align-items:center;justify-content:center;font-weight:700;position:relative;overflow:hidden}
-  .cell.filled{background:var(--fill);color:var(--fill)}
+  .board{
+    grid-area:board;
+    display:grid; grid-template-columns:repeat(20,var(--cell)); grid-template-rows:repeat(20,var(--cell));
+    gap:var(--gap); background:#ccc; padding:var(--gap); outline:none; transition:transform .2s ease
+  }
+  .cell{
+    width:var(--cell); height:var(--cell); background:#fff; border:1px solid #999;
+    display:flex; align-items:center; justify-content:center; font-weight:700; position:relative; overflow:hidden
+  }
+  .cell.filled{background:var(--fill); color:var(--fill)}
   .cell.xmark{color:var(--x)}
   .cell.selected{box-shadow:0 0 0 2px var(--sel) inset}
-  .cell.hiRow::after, .cell.hiCol::after{ content:""; position:absolute; inset:0; pointer-events:none; background:rgba(43,140,255,.08); }
+  .cell.hiRow::after,.cell.hiCol::after{
+    content:""; position:absolute; inset:0; pointer-events:none; background:rgba(43,140,255,.08);
+  }
+  /* 5の倍数太線＋外周 */
+  .cell[data-r="0"], .cell[data-r="5"], .cell[data-r="10"], .cell[data-r="15"]{border-top:2px solid #000}
+  .cell[data-c="0"], .cell[data-c="5"], .cell[data-c="10"], .cell[data-c="15"]{border-left:2px solid #000}
+  .cell[data-r="19"]{border-bottom:2px solid #000}
+  .cell[data-c="19"]{border-right:2px solid #000}
 
-  /* 5の倍数で太枠＋外周 */
-  .cell[data-r="0"], .cell[data-r="5"]{border-top:2px solid #000}
-  .cell[data-c="0"], .cell[data-c="5"]{border-left:2px solid #000}
-  .cell[data-r="9"]{border-bottom:2px solid #000}
-  .cell[data-c="9"]{border-right:2px solid #000}
+  /* 操作パネル（常設） */
+  .control{
+    position:sticky; bottom:0; z-index:9; background:var(--ui-bg); backdrop-filter:saturate(1.2) blur(2px);
+    border-top:1px solid #e5e5e5; padding:.5rem; display:flex; justify-content:center
+  }
+  .pad{
+    display:flex; gap:14px; align-items:center; flex-wrap:wrap; max-width:960px; width:100%; justify-content:space-between
+  }
+  .dpad{
+    display:grid; grid-template-columns:48px 48px 48px; grid-template-rows:48px 48px 48px; gap:6px
+  }
+  .dpad .btn{border-radius:12px; font-size:18px}
+  .dpad .sp{visibility:hidden}
+  .act{
+    display:flex; gap:8px; align-items:center; flex-wrap:wrap
+  }
+  .key{
+    width:64px; height:48px; border-radius:12px; font-weight:800; font-size:18px
+  }
+  .key.fill{background:#111; color:#fff}
+  .key.x{color:#444}
+  .key.clear{background:#fff}
+  .util{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .util .btn{height:48px; border-radius:12px}
+  .meter{min-width:90px; text-align:center; font-weight:700}
 
-  #status{margin-top:10px;font-size:1rem;font-weight:bold;color:#0a8a0a;min-height:1.2em}
-  #what{margin-top:4px;font-size:.95rem;color:#333;min-height:1.1em}
+  /* ダイアログ */
+  dialog{border:none; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.25); padding:16px 18px; max-width:min(720px,92vw)}
+  dialog::backdrop{background:rgba(0,0,0,.25)}
+  .dlg-title{font-weight:700; margin:0 0 .5rem}
+  .list{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:8px; margin:.5rem 0}
+  .card{border:1px solid #ddd; border-radius:10px; background:#fff; padding:.5rem}
+  .card h4{margin:.2rem 0 .2rem; font-size:.95rem}
+  .kbd{display:inline-block; min-width:1.6em; padding:.08rem .45rem; border:1px solid #bbb; border-bottom-width:2px; border-radius:6px; background:#fff; font-weight:700}
+  .row{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+  .grow{flex:1}
 
   /* クリア演出 */
-  @keyframes boardCelebrate{ 0%{transform:scale(1)} 15%{transform:scale(1.035)} 100%{transform:scale(1)} }
-  .board.celebrate{ animation: boardCelebrate 800ms ease }
-  @keyframes cellPop{ 0%{transform:scale(.9); filter:brightness(1.1)} 70%{transform:scale(1.02)} 100%{transform:scale(1); filter:brightness(1)} }
-  .cell.pop{ animation: cellPop 320ms ease forwards }
-
-  /* dialog（遊び方） */
-  dialog{border:none;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.25);padding:16px 18px;max-width:min(560px,90vw)}
-  dialog::backdrop{background:rgba(0,0,0,.25)}
-  .dlg-title{font-weight:700;margin:0 0 .5rem}
-  .kbd{display:inline-block;min-width:1.6em;padding:.1rem .45rem;border:1px solid #bbb;border-bottom-width:2px;border-radius:6px;background:#fff;font-weight:700}
-  .dlg-actions{display:flex;justify-content:flex-end;margin-top:10px}
-
-  /* ===== タブレットコントローラ（大型：縦横2倍＝面積4倍） ===== */
-  .controls{ display:none; margin-top:12px; gap:16px; align-items:center; justify-content:space-between; user-select:none; touch-action:none; flex-wrap:wrap }
-  .dpad{ display:grid; grid-template-columns:120px 120px 120px; grid-template-rows:120px 120px 120px; gap:12px; }
-  .dpad .pad{ grid-column:2; grid-row:2; opacity:.3; border-radius:18px; border:1px dashed #bbb }
-  .ctrlbtn{
-    width:120px; height:120px; border-radius:20px; border:1px solid #bbb; background:#fff;
-    box-shadow:0 2px 0 rgba(0,0,0,.08); display:flex; align-items:center; justify-content:center;
-    font-weight:800; font-size:28px; cursor:pointer; touch-action:none
-  }
-  .ctrlbtn:active, .ctrlbtn.active{ box-shadow:inset 0 2px 8px rgba(0,0,0,.22); background:#f2f6ff; border-color:#9bbcf4 }
-
-  .tools{ display:flex; gap:14px; }
-  .toolbtn{
-    width:144px; height:144px; border-radius:28px; border:2px solid #bbb; background:#fff; box-shadow:0 3px 0 rgba(0,0,0,.08);
-    display:flex; align-items:center; justify-content:center; font-weight:900; font-size:24px; cursor:pointer; touch-action:none
-  }
-  .toolbtn.fill .dot{ width:42px; height:42px; background:#111; border-radius:8px }
-  .toolbtn.x::after{ content:"×"; font-size:46px; color:#555; line-height:1 }
-  .toolbtn.active{ border-color:#2b8cff; box-shadow:0 0 0 5px rgba(43,140,255,.16) }
-
-  @media (pointer:coarse){
-    .controls{ display:flex }
-  }
-  @media (max-width:460px){
-    :root{ --cell:30px }
-  }
+  @keyframes boardCelebrate{0%{transform:scale(1)} 15%{transform:scale(1.03)} 100%{transform:scale(1)}}
+  .board.celebrate{animation:boardCelebrate 800ms ease}
+  @keyframes cellPop{0%{transform:scale(.9); filter:brightness(1.1)} 70%{transform:scale(1.02)} 100%{transform:scale(1); filter:brightness(1)}}
+  .cell.pop{animation:cellPop 320ms ease forwards}
 </style>
 </head>
 <body>
-<h1>10×10 ピクロス（Ver0.5 / タブレット統一操作＋大型ボタン）</h1>
-
-<div class="toolbar">
-  <button id="undoBtn" class="btn" title="取り消し (Ctrl+Z)" disabled>Undo</button>
-  <button id="redoBtn" class="btn" title="やり直し (Ctrl+Y)" disabled>Redo</button>
-  <button id="resetBtn" class="btn" title="盤面クリア">リセット</button>
-  <button id="checkBtn" class="btn" title="一致率を表示">チェック</button>
-  <button id="pngBtn" class="btn" title="PNGで保存">PNG保存</button>
-  <button id="helpBtn" class="btn" title="操作説明">遊び方</button>
-  <div class="range-wrap">
-    <label for="cellSlider">サイズ</label>
-    <input id="cellSlider" type="range" min="24" max="56" step="2" />
-    <span id="cellPx" class="stat">34px</span>
+  <div class="topbar">
+    <span class="title">Picross 20×20</span>
+    <button id="newBtn" class="btn">新規</button>
+    <button id="randBtn" class="btn">ランダム</button>
+    <button id="listBtn" class="btn">一覧</button>
+    <span class="seg"></span>
+    <button id="undoBtn" class="btn" title="取り消し (Ctrl+Z)" disabled>Undo</button>
+    <button id="redoBtn" class="btn" title="やり直し (Ctrl+Y)" disabled>Redo</button>
+    <span class="seg"></span>
+    <div class="range-wrap">
+      <label for="cellSlider">サイズ</label>
+      <input id="cellSlider" type="range" min="24" max="46" step="2" />
+      <span id="cellPx" class="stat">32px</span>
+    </div>
+    <span class="seg"></span>
+    <span id="progress" class="stat">一致率: 0%</span>
+    <span class="seg"></span>
+    <button id="helpBtn" class="btn">遊び方</button>
+    <button id="pngBtn" class="btn">PNG保存</button>
   </div>
-  <span id="progress" class="stat"></span>
-</div>
 
-<div class="wrap">
-  <div class="corner"></div>
-  <div class="top" id="top"></div>
-  <div class="left" id="left"></div>
-  <div class="board" id="board" tabindex="0" aria-label="盤面"></div>
-</div>
-
-<!-- タブレット向けコントローラ（大型） -->
-<div class="controls" id="controls" aria-label="タッチコントローラ">
-  <div class="dpad" aria-label="十字キー">
-    <div></div>                         <button class="ctrlbtn" data-dir="up"    aria-label="上">▲</button> <div></div>
-    <button class="ctrlbtn" data-dir="left"  aria-label="左">◀</button>
-    <div class="pad" aria-hidden="true"></div>
-    <button class="ctrlbtn" data-dir="right" aria-label="右">▶</button>
-    <div></div>                         <button class="ctrlbtn" data-dir="down"  aria-label="下">▼</button> <div></div>
+  <div class="stage">
+    <div class="wrap">
+      <div class="corner"></div>
+      <div class="top" id="top"></div>
+      <div class="left" id="left"></div>
+      <div class="board" id="board" tabindex="0" aria-label="盤面"></div>
+    </div>
   </div>
-  <div class="tools" aria-label="ツール">
-    <button id="toolFill" class="toolbtn fill" aria-pressed="false" aria-label="黒（Space/Enter相当）">
-      <span class="dot" aria-hidden="true"></span>
-    </button>
-    <button id="toolX" class="toolbtn x" aria-pressed="false" aria-label="×（Xキー相当）"></button>
+
+  <div class="control">
+    <div class="pad">
+      <div class="dpad">
+        <button class="btn sp" aria-hidden="true"></button>
+        <button id="upBtn" class="btn" aria-label="上へ">▲</button>
+        <button class="btn sp" aria-hidden="true"></button>
+
+        <button id="leftBtn" class="btn" aria-label="左へ">◀</button>
+        <button id="okBtn" class="btn" aria-label="黒を置く">●</button>
+        <button id="rightBtn" class="btn" aria-label="右へ">▶</button>
+
+        <button class="btn sp" aria-hidden="true"></button>
+        <button id="downBtn" class="btn" aria-label="下へ">▼</button>
+        <button class="btn sp" aria-hidden="true"></button>
+      </div>
+
+      <div class="act">
+        <button id="fillBtn" class="btn key fill" title="黒 (Space/Enter)">●</button>
+        <button id="xBtn" class="btn key x" title="× (X)">×</button>
+        <button id="clearBtn" class="btn key clear" title="解除 (C)">□</button>
+      </div>
+
+      <div class="util">
+        <div class="meter" id="meter">0,0</div>
+        <button id="checkBtn" class="btn">チェック</button>
+        <button id="resetBtn" class="btn">リセット</button>
+      </div>
+    </div>
   </div>
-</div>
 
-<div id="status"></div>
-<div id="what"></div>
+  <!-- 一覧ダイアログ -->
+  <dialog id="listDlg" aria-labelledby="listTitle">
+    <p id="listTitle" class="dlg-title">パズル一覧（20×20）</p>
+    <div class="list" id="listWrap"></div>
+    <div class="row" style="justify-content:flex-end; margin-top:.5rem">
+      <button id="listClose" class="btn">閉じる</button>
+    </div>
+  </dialog>
 
-<dialog id="helpDlg" aria-labelledby="helpTitle">
-  <p id="helpTitle" class="dlg-title">遊び方</p>
-  <ul style="margin:.2rem 0 .6rem 1.1rem">
-    <li>目的：行・列ヒント（連続黒数）に従って黒マスを埋め、<b>完全一致</b>でクリア。</li>
-    <li>黒⇔×は<strong>直接上書き禁止</strong>。切り替えるには「解除→置き直し」。</li>
-    <li>ストロークは<strong>開始セルの値</strong>で固定（空開始＝選んだツール／非0開始＝解除）。</li>
-  </ul>
-  <p style="margin:.6rem 0 .2rem"><b>マウス/キーボード</b></p>
-  <ul style="margin:.2rem 0 0 1.1rem">
-    <li>矢印：移動 / <span class="kbd">Space</span>・<span class="kbd">Enter</span>：黒 / <span class="kbd">X</span>：× / <span class="kbd">C</span>・<span class="kbd">Del</span>：解除</li>
-  </ul>
-  <p style="margin:.6rem 0 .2rem"><b>タブレット</b></p>
-  <ul style="margin:.2rem 0 0 1.1rem">
-    <li>下の<strong>黒</strong>（Space相当）または<strong>×</strong>（X相当）を押しながら、左の<strong>十字</strong>で連続入力</li>
-  </ul>
-  <div class="dlg-actions"><button id="helpCloseBtn" class="btn">閉じる</button></div>
-</dialog>
+  <!-- 遊び方 -->
+  <dialog id="helpDlg" aria-labelledby="helpTitle">
+    <p id="helpTitle" class="dlg-title">遊び方（共通UI）</p>
+    <ul>
+      <li>目的：行・列ヒント（黒の連続数）に従って塗り、<b>完全一致</b>でクリア。</li>
+      <li>D-Pad：1押し=1マス移動（長押しで加速）。中央の●は「黒を置く」。</li>
+      <li>操作ボタン：<span class="kbd">●</span> 黒、<span class="kbd">×</span> バツ、<span class="kbd">□</span> 解除。</li>
+      <li>キーボード：矢印=移動／<span class="kbd">Space</span>/<span class="kbd">Enter</span>=黒／<span class="kbd">X</span>=×／<span class="kbd">C</span>=解除。</li>
+      <li>エラー：ヒントが矛盾すると赤。達成は灰色。</li>
+    </ul>
+    <div class="row" style="justify-content:flex-end; margin-top:.5rem">
+      <button id="helpClose" class="btn">閉じる</button>
+    </div>
+  </dialog>
 
 <script>
-/* ====== 解答（ハート） ====== */
-const ROWS=10, COLS=10;
-const LS_KEY="picross-10x10-heart-v5";
-const LS_CELL_KEY="picross-10x10-cellpx";
+/* ==================== 基本設定 ==================== */
+const ROWS=20, COLS=20;
+const LS_CELL_KEY="picross-20x20-cellpx";
+const LS_LAST_ID="picross-20x20-lastid";
+const REPEAT_DELAY=280;   // 長押し開始(ms)
+const REPEAT_STEP=45;     // 長押し間隔(ms)
 
-const solution=[
-[0,1,1,0,0,0,0,1,1,0],
-[1,1,1,1,0,0,1,1,1,1],
-[1,1,1,1,1,1,1,1,1,1],
-[1,1,1,1,1,1,1,1,1,1],
-[0,1,1,1,1,1,1,1,1,0],
-[0,0,1,1,1,1,1,1,0,0],
-[0,0,0,1,1,1,1,0,0,0],
-[0,0,0,0,1,1,0,0,0,0],
-[0,0,0,0,1,1,0,0,0,0],
-[0,0,0,0,0,0,0,0,0,0]
+/* ==================== パズル定義（20×20 / 10種） ==================== */
+/* 可読性のため " .# "文字列20行をマップ化（#=黒, .=空白）
+   絵柄：Heart / Smiley / Arrow / Star / House / Diamond / Note / LetterA / Invader / Check */
+const PUZZLES = [
+  {
+    id:"heart",
+    title:"ハート",
+    art:[
+".....####....####.....",
+"....######..######....",
+"...################...",
+"..##################..",
+"..##################..",
+"..##################..",
+"...################...",
+"....##############....",
+".....############.....",
+"......##########......",
+".......########.......",
+"........######........",
+".........####.........",
+".........####.........",
+"..........##..........",
+"..........##..........",
+"......................",
+"......................",
+"......................",
+"......................"
+] },
+{
+  id:"smiley",
+    title:"スマイリー",
+    art:[
+"......................",
+"......############....",
+"....################..",
+"...#################..",
+"..########....#######.",
+"..#######......######.",
+".#######........#####.",
+".######..........####.",
+".#####...##..##...###.",
+".#####...##..##...###.",
+".#####............###.",
+".#####..########..###.",
+".######.########.####.",
+".#######.######.#####.",
+"..##################..",
+"...################...",
+"....##############....",
+"......##########......",
+"......................",
+"......................"
+]},
+{
+  id:"arrow",
+  title:"矢印（→）",
+  art:[
+"......................",
+".............###......",
+"............####......",
+"...........#####......",
+"..........######......",
+".........#######......",
+"###################...",
+"###########.#######...",
+".........#######......",
+"..........######......",
+"...........#####......",
+"............####......",
+".............###......",
+"......................",
+"......................",
+"......................",
+"......................",
+"......................",
+"......................",
+"......................"
+]},
+{
+  id:"star",
+  title:"スター",
+  art:[
+"......................",
+"..........##..........",
+"..........##..........",
+".........####.........",
+"..##.....####.....##..",
+"..###....####....###..",
+"...###...####...###...",
+"....###..####..###....",
+"#####.##########.#####",
+"######################",
+"#####.##########.#####",
+"....###..####..###....",
+"...###...####...###...",
+"..###....####....###..",
+"..##.....####.....##..",
+".........####.........",
+"..........##..........",
+"..........##..........",
+"......................",
+"......................"
+]},
+{
+  id:"house",
+  title:"家",
+  art:[
+"......................",
+".........####.........",
+"........######........",
+".......########.......",
+"......##########......",
+".....############.....",
+"....##############....",
+"...################...",
+"..##################..",
+"..#######....#######..",
+"..######......######..",
+"..######.####.######..",
+"..######.####.######..",
+"..######.####.######..",
+"..######.####.######..",
+"..######.####.######..",
+"..######.####.######..",
+"..##################..",
+"..##################..",
+"......................"
+]},
+{
+  id:"diamond",
+  title:"ダイヤ",
+  art:[
+"......................",
+"..........##..........",
+".........####.........",
+"........######........",
+".......########.......",
+"......##########......",
+".....############.....",
+"....##############....",
+"...################...",
+"..##################..",
+"...################...",
+"....##############....",
+".....############.....",
+"......##########......",
+".......########.......",
+"........######........",
+".........####.........",
+"..........##..........",
+"......................",
+"......................"
+]},
+{
+  id:"note",
+  title:"音符",
+  art:[
+"......................",
+"......................",
+"......................",
+".....#########........",
+".....#########........",
+".....#########........",
+".....#########........",
+".....#########....####",
+".....#########...#####",
+".....#########..######",
+".....#########..######",
+".....#########..######",
+".....#########..######",
+".....#########..######",
+"...###########..######",
+"..###########...#####.",
+"..##########....####..",
+"..######..........#...",
+"..####...............",
+"..###................"
+]},
+{
+  id:"letterA",
+  title:"文字A",
+  art:[
+"......................",
+".........######.......",
+"........########......",
+".......##########.....",
+"......####....####....",
+".....####......####...",
+".....###........###...",
+"....###..........###..",
+"...###............###.",
+"...#################..",
+"..###################.",
+"..###............###..",
+"..###............###..",
+"..###............###..",
+"..###............###..",
+"..###............###..",
+"..###............###..",
+"......................",
+"......................",
+"......................"
+]},
+{
+  id:"invader",
+  title:"インベーダー風",
+  art:[
+"......................",
+"......############....",
+".....##############...",
+"....###..######..###..",
+"...###..########..###.",
+"...###.##########.###.",
+"...##################.",
+"...##..###.##.###..##.",
+"...##..###.##.###..##.",
+"...##################.",
+"....###..######..###..",
+".....###..####..###...",
+"..##..###.####.###..##",
+"..##..###.####.###..##",
+"..##################..",
+"...####..........####.",
+"...#..#..........#..#.",
+"...#..#..........#..#.",
+"......................",
+"......................"
+]},
+{
+  id:"check",
+  title:"チェックマーク",
+  art:[
+"......................",
+"......................",
+"..................##..",
+".................###..",
+"................###...",
+"...............###....",
+"..............###.....",
+".....##......###......",
+".....###....###.......",
+"......###..###........",
+".......######.........",
+"........#####.........",
+".........####.........",
+"..........###.........",
+"...........##.........",
+"............#.........",
+"......................",
+"......................",
+"......................",
+"......................"
+]}
 ];
 
-/* ====== ヒント生成 ====== */
+/* ==================== 便利関数 ==================== */
+const byId = (id)=>document.getElementById(id);
 function runs(arr){let out=[],cnt=0;for(const v of arr){if(v)cnt++;else if(cnt){out.push(cnt);cnt=0}}if(cnt)out.push(cnt);return out.length?out:[0];}
-const rowClues=solution.map(r=>runs(r));
-const colClues=Array.from({length:COLS},(_,c)=>runs(solution.map(r=>r[c])));
-
-/* ====== DOM ====== */
-const topEl=document.getElementById('top');
-const leftEl=document.getElementById('left');
-const boardEl=document.getElementById('board');
-const statusEl=document.getElementById('status');
-const whatEl=document.getElementById('what');
-const progressEl=document.getElementById('progress');
-const undoBtn=document.getElementById('undoBtn');
-const redoBtn=document.getElementById('redoBtn');
-const resetBtn=document.getElementById('resetBtn');
-const checkBtn=document.getElementById('checkBtn');
-const pngBtn=document.getElementById('pngBtn');
-const helpBtn=document.getElementById('helpBtn');
-const helpDlg=document.getElementById('helpDlg');
-const helpCloseBtn=document.getElementById('helpCloseBtn');
-const cellSlider=document.getElementById('cellSlider');
-const cellPx=document.getElementById('cellPx');
-const toolFill=document.getElementById('toolFill');
-const toolX=document.getElementById('toolX');
-
-/* ====== ヒント描画 ====== */
-const topHints=[], leftHints=[];
-colClues.forEach(nums=>{
-  const d=document.createElement('div'); d.className='colHint';
-  d.style.display='flex'; d.style.flexDirection='column'; d.style.justifyContent='flex-end'; d.style.alignItems='center';
-  nums.forEach(n=>{const s=document.createElement('div'); s.textContent=n; d.appendChild(s);});
-  topEl.appendChild(d); topHints.push(d);
-});
-rowClues.forEach(nums=>{
-  const d=document.createElement('div'); d.className='rowHint';
-  nums.forEach(n=>{const s=document.createElement('div'); s.textContent=n; d.appendChild(s);});
-  leftEl.appendChild(d); leftHints.push(d);
-});
-
-/* ====== 盤面 ====== */
-let player = Array.from({length:ROWS},()=>Array(COLS).fill(0)); // 0空,1黒,2×
-const cells=[];
-for(let r=0;r<ROWS;r++){
-  cells[r]=[];
-  for(let c=0;c<COLS;c++){
-    const div=document.createElement('div');
-    div.className='cell'; div.dataset.r=r; div.dataset.c=c;
-    div.addEventListener('mousedown', ()=>boardEl.focus());
-    div.addEventListener('click', ()=>{
-      beginStroke('smart'); const cur=player[r][c];
-      const action = (cur===0)? 'fill' : 'clear';
-      applyCell(r,c, action); commitStroke();
-    });
-    div.addEventListener('contextmenu', (e)=>{
-      e.preventDefault();
-      beginStroke('smart'); const cur=player[r][c];
-      const action = (cur===0)? 'x' : 'clear';
-      applyCell(r,c, action); commitStroke();
-    });
-    boardEl.appendChild(div);
-    cells[r][c]=div;
-  }
+function sum(a){return a.reduce((x,y)=>x+y,0)}
+function maxv(a){return a.length?Math.max(...a):0}
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
+function strToGrid(lines){ // 20行の'.#'を0/1へ
+  return lines.slice(0,ROWS).map(row=> row.slice(0,COLS).split("").map(ch=> ch==="#"?1:0));
 }
 
-/* ====== 選択セル・ハイライト ====== */
+/* ==================== DOM取得 ==================== */
+const topEl=byId('top'), leftEl=byId('left'), boardEl=byId('board');
+const progressEl=byId('progress'), meterEl=byId('meter');
+const undoBtn=byId('undoBtn'), redoBtn=byId('redoBtn'), resetBtn=byId('resetBtn');
+const checkBtn=byId('checkBtn'), pngBtn=byId('pngBtn');
+const newBtn=byId('newBtn'), randBtn=byId('randBtn'), listBtn=byId('listBtn');
+const helpBtn=byId('helpBtn'), helpDlg=byId('helpDlg'), helpClose=byId('helpClose');
+const listDlg=byId('listDlg'), listWrap=byId('listWrap'), listClose=byId('listClose');
+const cellSlider=byId('cellSlider'), cellPx=byId('cellPx');
+
+const upBtn=byId('upBtn'), downBtn=byId('downBtn'), leftBtn=byId('leftBtn'), rightBtn=byId('rightBtn'), okBtn=byId('okBtn');
+const fillBtn=byId('fillBtn'), xBtn=byId('xBtn'), clearBtn=byId('clearBtn');
+
+/* ==================== 状態 ==================== */
+let solution = strToGrid(PUZZLES[0].art);
+let rowClues=[], colClues=[];
+let player = Array.from({length:ROWS},()=>Array(COLS).fill(0)); // 0空/1黒/2×
+let cells=[];
 let selR=0, selC=0, prevSelR=0, prevSelC=0;
-function setSelected(r,c){
-  cells[selR]?.[selC]?.classList.remove('selected');
-  prevSelR=selR; prevSelC=selC;
-  selR=r; selC=c;
-  cells[r][c].classList.add('selected');
-  leftHints[prevSelR]?.classList.remove('hiHint');
-  topHints[prevSelC]?.classList.remove('hiHint');
-  leftHints[selR]?.classList.add('hiHint');
-  topHints[selC]?.classList.add('hiHint');
-  updateRowColHighlights();
+let currentId = PUZZLES[0].id;
+
+const undoStack=[], redoStack=[];
+function snapshot(){return JSON.stringify(player)}
+function restore(s){player=JSON.parse(s); redrawAll(); checkAll();}
+
+function pushUndo(before){undoStack.push(before); redoStack.length=0; refreshButtons()}
+function doUndo(){
+  if(!undoStack.length) return;
+  const cur=snapshot(); const prev=undoStack.pop();
+  redoStack.push(cur); restore(prev); refreshButtons(); saveLS();
 }
-function updateRowColHighlights(){
+function doRedo(){
+  if(!redoStack.length) return;
+  const cur=snapshot(); const next=redoStack.pop();
+  undoStack.push(cur); restore(next); refreshButtons(); saveLS();
+}
+function refreshButtons(){
+  undoBtn.disabled = undoStack.length===0;
+  redoBtn.disabled = redoStack.length===0;
+}
+
+/* ==================== ヒント生成/描画 ==================== */
+function buildClues(){
+  rowClues = solution.map(r=>runs(r));
+  colClues = Array.from({length:COLS},(_,c)=> runs(solution.map(r=>r[c])));
+}
+function drawHints(){
+  topEl.innerHTML=""; leftEl.innerHTML="";
+  colClues.forEach(nums=>{
+    const d=document.createElement('div'); d.className='colHint';
+    nums.forEach(n=>{const s=document.createElement('div'); s.textContent=n; d.appendChild(s);});
+    topEl.appendChild(d);
+  });
+  rowClues.forEach(nums=>{
+    const d=document.createElement('div'); d.className='rowHint';
+    nums.forEach(n=>{const s=document.createElement('div'); s.textContent=n; d.appendChild(s);});
+    leftEl.appendChild(d);
+  });
+}
+
+/* ==================== 盤面生成 ==================== */
+function buildBoard(){
+  boardEl.innerHTML=""; cells=[];
   for(let r=0;r<ROWS;r++){
+    cells[r]=[];
     for(let c=0;c<COLS;c++){
-      const el=cells[r][c];
-      if(r===selR) el.classList.add('hiRow'); else el.classList.remove('hiRow');
-      if(c===selC) el.classList.add('hiCol'); else el.classList.remove('hiCol');
+      const div=document.createElement('div'); div.className='cell'; div.dataset.r=r; div.dataset.c=c;
+      div.addEventListener('mousedown', ()=>boardEl.focus());
+      // クリック：開始セルの状態から動作決定（スマホでも同じ）
+      div.addEventListener('click', ()=>{
+        beginStroke('smart'); const cur=player[r][c];
+        const action = (cur===0)? 'fill' : 'clear';
+        applyCell(r,c,action); commitStroke();
+        setSelected(r,c);
+      });
+      div.addEventListener('contextmenu',(e)=>{e.preventDefault(); beginStroke('smart'); const cur=player[r][c];
+        const action = (cur===0)? 'x' : 'clear'; applyCell(r,c,action); commitStroke(); setSelected(r,c);
+      });
+      boardEl.appendChild(div);
+      cells[r][c]=div;
     }
   }
 }
-setSelected(0,0);
 
-/* ====== 描画 ====== */
+/* ==================== セル描画 & 選択 ==================== */
 function updateCell(r,c){
   const el=cells[r][c];
   el.className='cell'; el.dataset.r=r; el.dataset.c=c;
-  if(player[r][c]===1){ el.classList.add('filled'); el.textContent=''; }
-  else if(player[r][c]===2){ el.classList.add('xmark'); el.textContent='×'; }
-  else { el.textContent=''; }
+  const v=player[r][c];
+  if(v===1){ el.classList.add('filled'); el.textContent=""; }
+  else if(v===2){ el.classList.add('xmark'); el.textContent="×"; }
+  else el.textContent="";
   if(r===selR && c===selC) el.classList.add('selected');
   if(r===selR) el.classList.add('hiRow');
   if(c===selC) el.classList.add('hiCol');
 }
 function redrawAll(){ for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) updateCell(r,c); }
 
-/* ====== Undo/Redo ====== */
-const undoStack=[], redoStack=[];
-function snapshot(){ return JSON.stringify(player); }
-function restore(s){ player = JSON.parse(s); redrawAll(); checkAll(); }
-function pushUndo(snap){ undoStack.push(snap); undoBtn.disabled = undoStack.length===0; redoStack.length=0; redoBtn.disabled=true; }
-function doUndo(){
-  if(!undoStack.length) return;
-  const cur=snapshot();
-  const prev=undoStack.pop();
-  redoStack.push(cur);
-  restore(prev);
-  undoBtn.disabled = undoStack.length===0; redoBtn.disabled=false; saveLS();
+function setSelected(r,c){
+  cells[selR]?.[selC]?.classList.remove('selected');
+  prevSelR=selR; prevSelC=selC; selR=r; selC=c;
+  cells[r][c].classList.add('selected');
+  updateRowColHL();
+  meterEl.textContent = `${selR+1},${selC+1}`;
 }
-function doRedo(){
-  if(!redoStack.length) return;
-  const cur=snapshot();
-  const next=redoStack.pop();
-  undoStack.push(cur);
-  restore(next);
-  undoBtn.disabled=false; redoBtn.disabled = redoStack.length===0; saveLS();
+function updateRowColHL(){
+  const topHints=[...topEl.children], leftHints=[...leftEl.children];
+  leftHints[prevSelR]?.classList.remove('hiHint');
+  topHints[prevSelC]?.classList.remove('hiHint');
+  leftHints[selR]?.classList.add('hiHint');
+  topHints[selC]?.classList.add('hiHint');
+
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const el=cells[r][c];
+    if(r===selR) el.classList.add('hiRow'); else el.classList.remove('hiRow');
+    if(c===selC) el.classList.add('hiCol'); else el.classList.remove('hiCol');
+  }
 }
 
-/* ====== ストローク管理 ====== */
+/* ==================== ストローク（Undo単位） ==================== */
 let strokeActive=false, strokeAction=null, strokeStartedSnapshot=null;
 function beginStroke(action){
   if(strokeActive) return;
-  strokeActive=true; strokeAction=action; strokeStartedSnapshot = snapshot();
+  strokeActive=true; strokeAction=action; strokeStartedSnapshot=snapshot();
 }
 function commitStroke(){
   if(!strokeActive) return;
-  const before = strokeStartedSnapshot;
-  const after = snapshot();
+  const before = strokeStartedSnapshot, after=snapshot();
   strokeActive=false; strokeAction=null; strokeStartedSnapshot=null;
   if(before!==after){ pushUndo(before); saveLSDebounced(); }
 }
 
-/* ====== 上書き禁止を厳守する適用 ====== */
+/* ==================== 入力適用 ==================== */
 function applyCell(r,c,action){
-  const cur = player[r][c]; // 0/1/2
+  const cur=player[r][c];
   if(action==='clear'){ if(cur!==0){ player[r][c]=0; updateCell(r,c); checkAll(); } return; }
   if(action==='fill'){ if(cur===0){ player[r][c]=1; updateCell(r,c); checkAll(); } return; }
   if(action==='x'){    if(cur===0){ player[r][c]=2; updateCell(r,c); checkAll(); } return; }
 }
 
-/* ====== 盤面ドラッグ（タッチ/マウス） ====== */
+/* ドラッグ */
 let dragging=false;
-boardEl.addEventListener('pointerdown', (e)=>{
-  const target = e.target.closest('.cell'); if(!target) return;
-  const r=+target.dataset.r, c=+target.dataset.c;
-  boardEl.setPointerCapture?.(e.pointerId);
-  dragging=true;
-
-  // 盤面直接操作：PCは従来、タッチは「開始セルの値で固定」
+boardEl.addEventListener('pointerdown',(e)=>{
+  const t=e.target.closest('.cell'); if(!t) return;
+  const r=+t.dataset.r, c=+t.dataset.c; boardEl.setPointerCapture(e.pointerId); dragging=true;
   const cur=player[r][c];
-  if(e.pointerType==='mouse'){
-    if(cur===0){
-      if(e.button===2){ strokeAction='x'; }
-      else if(e.button===0 && e.altKey){ strokeAction='clear'; }
-      else { strokeAction='fill'; }
-    }else{ strokeAction='clear'; }
-  }else{ // touch/pen
-    // タッチは単独ドラッグ＝「黒相当（fill）」でなく、開始セルで固定
-    strokeAction = (cur===0)? 'fill' : 'clear';
-  }
-  beginStroke(strokeAction);
-  setSelected(r,c);
-  applyCell(r,c,strokeAction);
+  if(cur===0){
+    if(e.button===2){ strokeAction='x'; }
+    else if(e.button===0 && e.altKey){ strokeAction='clear'; }
+    else{ strokeAction='fill'; }
+  }else{ strokeAction='clear'; }
+  beginStroke(strokeAction); setSelected(r,c); applyCell(r,c,strokeAction);
 });
-boardEl.addEventListener('pointermove', (e)=>{
+boardEl.addEventListener('pointermove',(e)=>{
   if(!dragging) return;
-  const target = document.elementFromPoint(e.clientX,e.clientY)?.closest('.cell');
-  if(!target || !boardEl.contains(target)) return;
-  const r=+target.dataset.r, c=+target.dataset.c;
-  setSelected(r,c);
-  applyCell(r,c,strokeAction);
+  const t=document.elementFromPoint(e.clientX,e.clientY)?.closest('.cell'); if(!t || !boardEl.contains(t)) return;
+  const r=+t.dataset.r, c=+t.dataset.c; setSelected(r,c); applyCell(r,c,strokeAction);
 });
-function endDrag(e){
-  if(dragging){ dragging=false; commitStroke(); }
-  if(e) boardEl.releasePointerCapture?.(e.pointerId);
-}
-boardEl.addEventListener('pointerup', endDrag);
-boardEl.addEventListener('pointercancel', endDrag);
-boardEl.addEventListener('contextmenu', e=>e.preventDefault());
+function endDrag(e){ if(dragging){ dragging=false; commitStroke(); } if(e) boardEl.releasePointerCapture?.(e.pointerId); }
+boardEl.addEventListener('pointerup',endDrag);
+boardEl.addEventListener('pointercancel',endDrag);
+boardEl.addEventListener('contextmenu',e=>e.preventDefault());
 
-/* ====== キーボード ====== */
+/* キーボード */
 let holding=false;
 boardEl.addEventListener('keydown',e=>{
   if(e.key.startsWith('Arrow')){
     e.preventDefault();
-    if(e.key==='ArrowUp')   setSelected(Math.max(0,selR-1),selC);
+    if(e.key==='ArrowUp') setSelected(Math.max(0,selR-1),selC);
     if(e.key==='ArrowDown') setSelected(Math.min(ROWS-1,selR+1),selC);
     if(e.key==='ArrowLeft') setSelected(selR,Math.max(0,selC-1));
-    if(e.key==='ArrowRight')setSelected(selR,Math.min(COLS-1,selC+1));
+    if(e.key==='ArrowRight') setSelected(selR,Math.min(COLS-1,selC+1));
     if(holding && strokeActive){ applyCell(selR,selC,strokeAction); }
     checkAll(); return;
   }
   if(e.key===' '||e.key==='Enter'){ e.preventDefault();
-    if(!holding){ holding=true;
-      strokeAction = (player[selR][selC]===0) ? 'fill' : 'clear';
-      beginStroke(strokeAction); applyCell(selR,selC,strokeAction);
-    } return;
+    if(!holding){ holding=true; strokeAction=(player[selR][selC]===0)?'fill':'clear'; beginStroke(strokeAction); applyCell(selR,selC,strokeAction); }
+    return;
   }
   if(e.key.toLowerCase()==='x'){ e.preventDefault();
-    if(!holding){ holding=true;
-      strokeAction = (player[selR][selC]===0) ? 'x' : 'clear';
-      beginStroke(strokeAction); applyCell(selR,selC,strokeAction);
-    } return;
+    if(!holding){ holding=true; strokeAction=(player[selR][selC]===0)?'x':'clear'; beginStroke(strokeAction); applyCell(selR,selC,strokeAction); }
+    return;
   }
   if(e.key.toLowerCase()==='c'){ e.preventDefault();
-    if(!holding){ holding=true; strokeAction='clear';
-      beginStroke(strokeAction); applyCell(selR,selC,strokeAction);
-    } return;
+    if(!holding){ holding=true; strokeAction='clear'; beginStroke(strokeAction); applyCell(selR,selC,strokeAction); }
+    return;
   }
   if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); beginStroke('clear'); applyCell(selR,selC,'clear'); commitStroke(); return; }
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); doUndo(); return; }
@@ -397,238 +680,214 @@ window.addEventListener('keyup',e=>{
   }
 });
 
-/* ====== エラー/達成チェック ====== */
-function checkAll(){ checkClues(); checkSolved(); }
+/* D-Pad 長押しオートリピート */
+function withRepeat(el, onFire){
+  let timer=null, rep=null;
+  const fire=()=>onFire();
+  el.addEventListener('pointerdown', e=>{
+    e.preventDefault(); fire();
+    timer=setTimeout(()=>{ rep=setInterval(fire, REPEAT_STEP); }, REPEAT_DELAY);
+  });
+  const stop=()=>{
+    clearTimeout(timer); timer=null; clearInterval(rep); rep=null;
+    commitStroke();
+  };
+  el.addEventListener('pointerup',stop);
+  el.addEventListener('pointercancel',stop);
+  el.addEventListener('pointerleave',stop);
+}
+withRepeat(upBtn,   ()=>{ setSelected(Math.max(0,selR-1),selC); if(holding && strokeActive){ applyCell(selR,selC,strokeAction);} });
+withRepeat(downBtn, ()=>{ setSelected(Math.min(ROWS-1,selR+1),selC); if(holding && strokeActive){ applyCell(selR,selC,strokeAction);} });
+withRepeat(leftBtn, ()=>{ setSelected(selR,Math.max(0,selC-1)); if(holding && strokeActive){ applyCell(selR,selC,strokeAction);} });
+withRepeat(rightBtn,()=>{ setSelected(selR,Math.min(COLS-1,selC+1)); if(holding && strokeActive){ applyCell(selR,selC,strokeAction);} });
+okBtn.addEventListener('click', ()=>{ beginStroke('smart'); const cur=player[selR][selC]; const act=(cur===0)?'fill':'clear'; applyCell(selR,selC,act); commitStroke(); });
+
+withRepeat(fillBtn,  ()=>{ holding=true; strokeAction=(player[selR][selC]===0)?'fill':'clear'; if(!strokeActive) beginStroke(strokeAction); applyCell(selR,selC,strokeAction); });
+withRepeat(xBtn,     ()=>{ holding=true; strokeAction=(player[selR][selC]===0)?'x':'clear';    if(!strokeActive) beginStroke(strokeAction); applyCell(selR,selC,strokeAction); });
+withRepeat(clearBtn, ()=>{ holding=true; strokeAction='clear';                                if(!strokeActive) beginStroke(strokeAction); applyCell(selR,selC,strokeAction); });
+
+/* ==================== エラー/達成チェック ==================== */
 function getLineValues(isRow, idx){
-  const arr = [];
-  if(isRow){ for(let c=0;c<COLS;c++) arr.push(player[idx][c]); }
-  else{ for(let r=0;r<ROWS;r++) arr.push(player[r][idx]); }
+  const arr=[]; if(isRow){ for(let c=0;c<COLS;c++) arr.push(player[idx][c]); } else { for(let r=0;r<ROWS;r++) arr.push(player[r][idx]); }
   return arr;
 }
-function sum(a){return a.reduce((x,y)=>x+y,0)}
-function maxv(a){return a.length?Math.max(...a):0}
-function countOnes(a){let n=0;for(const v of a) if(v===1) n++; return n;}
-function getSegments(a){
-  const segs=[]; let s=-1;
-  for(let i=0;i<a.length;i++){
-    if(a[i]!==2 && s<0) s=i;
-    if((a[i]===2 || i===a.length-1) && s>=0){
-      const e = (a[i]===2)? i-1 : i; segs.push([s,e]); s=-1;
-    }
-  } return segs;
-}
-function segLen(seg){ return seg[1]-seg[0]+1; }
+function countOnes(arr){let n=0; for(const v of arr) if(v===1) n++; return n;}
+function getSegments(arr){const segs=[]; let s=-1; for(let i=0;i<arr.length;i++){ if(arr[i]!==2 && s<0) s=i; if((arr[i]===2 || i===arr.length-1) && s>=0){ const e=(arr[i]===2)?i-1:i; segs.push([s,e]); s=-1; } } return segs;}
+function segLen(seg){return seg[1]-seg[0]+1}
+
 function clearHintState(el){ el.classList.remove('hintError'); [...el.children].forEach(n=> n.classList.remove('error','done')); }
+
 function evalLine(isRow, idx, hints, hintEl){
   clearHintState(hintEl);
-  const vals = getLineValues(isRow, idx);
-  const onesRuns = runs(vals.map(v=>v===1));
-  const onesCount = countOnes(vals);
-  const segs = getSegments(vals);
-  const hintSum = sum(hints);
-  const hintMax = maxv(hints);
+  const vals=getLineValues(isRow,idx);
+  const onesRuns=runs(vals.map(v=>v===1));
+  const onesCount=countOnes(vals);
+  const segs=getSegments(vals);
+  const hintSum=sum(hints), hintMax=maxv(hints);
 
   const done = JSON.stringify(onesRuns)===JSON.stringify(hints);
   if(done){ [...hintEl.children].forEach(n=> n.classList.add('done')); }
 
-  let lineError = false;
-  const perHintError = new Array(hints.length).fill(false);
+  let lineError=false;
+  const perHintError=new Array(hints.length).fill(false);
 
-  if(onesRuns.length>1 || onesRuns[0]!==0){
-    if(onesRuns.length > hints.length){ lineError = true; }
-  }
-  if(onesCount > hintSum){ lineError = true; }
-  if(maxv(onesRuns) > hintMax){ lineError = true; }
+  if((onesRuns.length>1 || onesRuns[0]!==0) && onesRuns.length>hints.length) lineError=true; // 黒塊数過剰
+  if(onesCount>hintSum) lineError=true;                              // 合計超過
+  if(maxv(onesRuns)>hintMax) lineError=true;                         // 連続超過
 
-  for(let i=0;i<hints.length;i++){
-    const h = hints[i];
-    let canPlaceSomewhere = false;
-    for(const seg of segs){ if(segLen(seg) >= h){ canPlaceSomewhere = true; break; } }
-    if(!canPlaceSomewhere){ perHintError[i] = true; }
+  for(let i=0;i<hints.length;i++){ // 伸びしろ不足/置場消滅
+    const h=hints[i]; let can=false; for(const seg of segs){ if(segLen(seg)>=h){ can=true; break; } }
+    if(!can) perHintError[i]=true;
   }
 
   if(lineError){ hintEl.classList.add('hintError'); }
   else{ [...hintEl.children].forEach((n,i)=>{ if(perHintError[i]) n.classList.add('error'); }); }
 
-  if(!lineError && done){
-    [...hintEl.children].forEach((n)=>{ n.classList.remove('error'); n.classList.add('done'); });
-  }
+  if(!lineError && done){ [...hintEl.children].forEach(n=>{ n.classList.remove('error'); n.classList.add('done'); }); }
 }
-function checkClues(){ for(let r=0;r<ROWS;r++) evalLine(true, r, rowClues[r], leftHints[r]); for(let c=0;c<COLS;c++) evalLine(false, c, colClues[c], topHints[c]); }
 
-/* ====== クリア演出 ====== */
+function checkClues(){
+  const leftHints=[...leftEl.children], topHints=[...topEl.children];
+  for(let r=0;r<ROWS;r++) evalLine(true, r, rowClues[r], leftHints[r]);
+  for(let c=0;c<COLS;c++) evalLine(false, c, colClues[c], topHints[c]);
+}
+
 let celebrated=false;
 function triggerCelebrate(){
-  boardEl.classList.add('celebrate');
-  setTimeout(()=>boardEl.classList.remove('celebrate'), 900);
+  boardEl.classList.add('celebrate'); setTimeout(()=>boardEl.classList.remove('celebrate'), 900);
   const pops=[]; let delay=0;
   for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
-    if(solution[r][c]===1){
-      const el=cells[r][c];
-      el.classList.add('pop'); el.style.animationDelay = `${delay}ms`;
-      pops.push(el); delay += 20;
-    }
+    if(solution[r][c]===1){ const el=cells[r][c]; el.classList.add('pop'); el.style.animationDelay=`${delay}ms`; pops.push(el); delay+=12; }
   }
-  setTimeout(()=>{ pops.forEach(el=>{ el.classList.remove('pop'); el.style.animationDelay=""; }); whatEl.textContent="この絵：ハート"; }, delay+400);
+  setTimeout(()=>{ pops.forEach(el=>{ el.classList.remove('pop'); el.style.animationDelay=""; }); }, delay+400);
 }
+
 function checkSolved(){
   for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
-    const need=solution[r][c]===1, put=player[r][c]===1;
-    if(need!==put){ statusEl.textContent=""; return; }
+    if((solution[r][c]===1)!==(player[r][c]===1)){ progressEl.textContent=getProgressText(); return; }
   }
-  statusEl.textContent="クリア！";
+  progressEl.textContent="クリア！";
   if(!celebrated){ celebrated=true; triggerCelebrate(); }
 }
+function checkAll(){ checkClues(); checkSolved(); progressEl.textContent=getProgressText(); }
 
-/* ====== ツールバー ====== */
-undoBtn.onclick=()=>doUndo();
-redoBtn.onclick=()=>doRedo();
-resetBtn.onclick=()=>{
-  beginStroke('clear-all');
-  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ if(player[r][c]!==0){ player[r][c]=0; updateCell(r,c);} }
-  commitStroke(); checkAll();
-  celebrated=false; statusEl.textContent=""; whatEl.textContent="";
-  saveLS();
-};
-checkBtn.onclick=()=>{ progressEl.textContent = getProgressText(); };
-pngBtn.onclick=()=>{ savePNG(); };
-helpBtn.onclick=()=>{ helpDlg.showModal(); };
-helpCloseBtn.onclick=()=>{ helpDlg.close(); };
-
-/* ====== 一致率 ====== */
 function getProgressText(){
   let correct=0,total=ROWS*COLS;
   for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
     const need=solution[r][c]===1, put=player[r][c]===1;
     if(need===put) correct++;
   }
-  const pct = Math.round((correct/total)*100);
+  const pct=Math.round((correct/total)*100);
   return `一致率: ${pct}%`;
 }
 
-/* ====== 保存 ====== */
-function saveLS(){ try{ localStorage.setItem(LS_KEY, snapshot()); }catch{} }
+/* ==================== パズル切替 & 保存 ==================== */
+function loadPuzzleById(id){
+  const p = PUZZLES.find(x=>x.id===id) || PUZZLES[0];
+  currentId=p.id;
+  solution = strToGrid(p.art);
+  buildClues(); drawHints(); buildBoard();
+  if(loadLS()){ /* loaded */ } else { player=Array.from({length:ROWS},()=>Array(COLS).fill(0)); }
+  redrawAll(); setSelected(0,0); checkAll();
+  celebrated=false; progressEl.textContent=getProgressText(); saveLS(); localStorage.setItem(LS_LAST_ID,currentId);
+}
+function randomPuzzle(){
+  const idx = Math.floor(Math.random()*PUZZLES.length);
+  loadPuzzleById(PUZZLES[idx].id);
+}
+
+function saveLS(){ try{ localStorage.setItem(`picross-20x20-${currentId}`, snapshot()); }catch{} }
 let saveTimer=null;
 function saveLSDebounced(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveLS,300); }
 function loadLS(){
   try{
-    const s=localStorage.getItem(LS_KEY);
-    if(!s) return false;
-    const state=JSON.parse(s);
+    const s=localStorage.getItem(`picross-20x20-${currentId}`);
+    if(!s) return false; const state=JSON.parse(s);
     if(Array.isArray(state) && state.length===ROWS){ player=state; return true; }
   }catch{}
   return false;
 }
 
-/* ====== PNG保存 ====== */
+/* ==================== PNG保存 ==================== */
 function savePNG(){
   const scale=2, pad=8;
-  const cell= parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cell')) || 34;
-  const gap=2, W = COLS*cell + (COLS-1)*gap + pad*2, H = ROWS*cell + (ROWS-1)*gap + pad*2;
+  const cell=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cell'))||32;
+  const gap=2, W=COLS*cell+(COLS-1)*gap+pad*2, H=ROWS*cell+(ROWS-1)*gap+pad*2;
   const canvas=document.createElement('canvas'); canvas.width=W*scale; canvas.height=H*scale;
   const ctx=canvas.getContext('2d'); ctx.scale(scale,scale);
   ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,W,H);
   for(let r=0;r<ROWS;r++){
     for(let c=0;c<COLS;c++){
       const x=pad + c*(cell+gap), y=pad + r*(cell+gap);
-      ctx.fillStyle = (player[r][c]===1) ? "#111111" : "#ffffff";
+      ctx.fillStyle=(player[r][c]===1)?"#111111":"#ffffff";
       ctx.fillRect(x,y,cell,cell);
       if(player[r][c]===2){
         ctx.strokeStyle="#666666"; ctx.lineWidth=2;
-        ctx.beginPath(); ctx.moveTo(x+6,y+6); ctx.lineTo(x+cell-6,y+cell-6);
-        ctx.moveTo(x+cell-6,y+6); ctx.lineTo(x+6,y+cell-6); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x+4,y+4); ctx.lineTo(x+cell-4,y+cell-4);
+        ctx.moveTo(x+cell-4,y+4); ctx.lineTo(x+4,y+cell-4); ctx.stroke();
       }
-      ctx.strokeStyle="#999999"; ctx.lineWidth=1; ctx.strokeRect(x+0.5,y+0.5,cell-1,cell-1);
+      ctx.strokeStyle="#999999"; ctx.lineWidth=1; ctx.strokeRect(x+.5,y+.5,cell-1,cell-1);
       ctx.strokeStyle="#000000"; ctx.lineWidth=2;
-      if(r===0 || r===5) { ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+cell,y); ctx.stroke(); }
-      if(c===0 || c===5) { ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y+cell); ctx.stroke(); }
-      if(r===9){ ctx.beginPath(); ctx.moveTo(x,y+cell); ctx.lineTo(x+cell,y+cell); ctx.stroke(); }
-      if(c===9){ ctx.beginPath(); ctx.moveTo(x+cell,y); ctx.lineTo(x+cell,y+cell); ctx.stroke(); }
+      if(r%5===0) { ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+cell,y); ctx.stroke(); }
+      if(c%5===0) { ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y+cell); ctx.stroke(); }
+      if(r===ROWS-1){ ctx.beginPath(); ctx.moveTo(x,y+cell); ctx.lineTo(x+cell,y+cell); ctx.stroke(); }
+      if(c===COLS-1){ ctx.beginPath(); ctx.moveTo(x+cell,y); ctx.lineTo(x+cell,y+cell); ctx.stroke(); }
     }
   }
-  const a=document.createElement('a');
-  a.download="picross_10x10_ハート.png";
-  a.href=canvas.toDataURL("image/png");
-  a.click();
+  const a=document.createElement('a'); a.download=`picross_${currentId}.png`; a.href=canvas.toDataURL("image/png"); a.click();
 }
 
-/* ====== セルサイズ ====== */
-function applyCellSize(px){
-  document.documentElement.style.setProperty('--cell', px+'px');
-  cellPx.textContent = px+'px';
-}
+/* ==================== UIイベント ==================== */
+undoBtn.onclick=()=>doUndo();
+redoBtn.onclick=()=>doRedo();
+resetBtn.onclick=()=>{
+  beginStroke('clear-all'); for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ if(player[r][c]!==0){ player[r][c]=0; updateCell(r,c); } }
+  commitStroke(); celebrated=false; checkAll(); saveLS();
+};
+checkBtn.onclick=()=>{ progressEl.textContent=getProgressText(); };
+pngBtn.onclick=()=>{ savePNG(); };
+newBtn.onclick=()=>{ loadPuzzleById(currentId); };
+randBtn.onclick=()=>{ randomPuzzle(); };
+helpBtn.onclick=()=> helpDlg.showModal();
+byId('helpClose').onclick=()=> helpDlg.close();
+
+/* 一覧 */
+listBtn.onclick=()=>{
+  listWrap.innerHTML="";
+  for(const p of PUZZLES){
+    const card=document.createElement('div'); card.className='card';
+    const h=document.createElement('h4'); h.textContent=p.title; card.appendChild(h);
+    const small=document.createElement('div'); small.style.fontSize=".8rem"; small.style.color="#555"; small.textContent=p.id; card.appendChild(small);
+    const btn=document.createElement('button'); btn.className='btn'; btn.textContent='このパズルを開く';
+    btn.onclick=()=>{ listDlg.close(); loadPuzzleById(p.id); };
+    card.appendChild(btn);
+    listWrap.appendChild(card);
+  }
+  listDlg.showModal();
+};
+listClose.onclick=()=> listDlg.close();
+
+/* セルサイズ */
+function applyCellSize(px){ document.documentElement.style.setProperty('--cell', px+'px'); cellPx.textContent=px+'px'; }
 (function initCellSize(){
-  const saved = parseInt(localStorage.getItem(LS_CELL_KEY)||"",10);
-  const init = Number.isFinite(saved) ? Math.min(56, Math.max(24, saved)) : 34;
-  cellSlider.value = String(init);
-  applyCellSize(init);
+  const saved=parseInt(localStorage.getItem(LS_CELL_KEY)||"",10);
+  const init=Number.isFinite(saved)? clamp(saved,24,46) : 32;
+  cellSlider.value=String(init); applyCellSize(init);
 })();
 let sizeTimer=null;
 cellSlider.addEventListener('input', ()=>{
   applyCellSize(parseInt(cellSlider.value,10));
-  clearTimeout(sizeTimer);
-  sizeTimer = setTimeout(()=>{ try{ localStorage.setItem(LS_CELL_KEY, cellSlider.value);}catch{} }, 200);
+  clearTimeout(sizeTimer); sizeTimer=setTimeout(()=>{ try{ localStorage.setItem(LS_CELL_KEY, cellSlider.value);}catch{} }, 200);
 });
 
-/* ====== タブレット：ボタン挙動をキーボードと完全一致に ====== */
-let toolHolding = false;        // ボタン押下中か
-let toolStrokeBegun = false;    // beginStroke 済みか
-let toolKind = null;            // 'fill' | 'x' | null
-
-function startTool(kind){
-  // Space/Enter or X と同じ：開始セルの値でストローク動作固定
-  toolKind = kind; // 期待ツール（黒 or ×）…ただし非0開始なら clear に固定
-  const initialAction = (player[selR][selC]===0) ? kind : 'clear';
-  beginStroke(initialAction);
-  toolHolding = true; toolStrokeBegun = true; strokeAction = initialAction; // ←以後の移動でも同じ action を使う
-  applyCell(selR, selC, strokeAction);
-}
-function endTool(){
-  toolHolding = false; toolKind = null;
-  if(toolStrokeBegun){ commitStroke(); toolStrokeBegun=false; }
-}
-toolFill.addEventListener('pointerdown', (e)=>{ e.preventDefault(); toolFill.classList.add('active'); startTool('fill'); });
-toolX.addEventListener('pointerdown',    (e)=>{ e.preventDefault(); toolX.classList.add('active');   startTool('x');    });
-for(const el of [toolFill, toolX]){
-  el.addEventListener('pointerup',   (e)=>{ e.preventDefault(); el.classList.remove('active'); endTool(); });
-  el.addEventListener('pointercancel',(e)=>{ e.preventDefault(); el.classList.remove('active'); endTool(); });
-  el.addEventListener('pointerleave',(e)=>{ if(toolHolding) el.classList.add('active'); });
-}
-
-/* 十字キー：押しっぱなしでオートリピート。ツール押下中は strokeAction を連続適用（上書き禁止は applyCell が担保） */
-const dpadButtons = Array.from(document.querySelectorAll('.ctrlbtn[data-dir]'));
-let repeatTimer = null, repeatInterval = null;
-function moveOnce(dir){
-  if(dir==='up')    setSelected(Math.max(0,selR-1), selC);
-  if(dir==='down')  setSelected(Math.min(ROWS-1,selR+1), selC);
-  if(dir==='left')  setSelected(selR, Math.max(0,selC-1));
-  if(dir==='right') setSelected(selR, Math.min(COLS-1,selC+1));
-  if(toolHolding && strokeActive){ applyCell(selR, selC, strokeAction); }
-}
-function startRepeat(dir, el){
-  moveOnce(dir);
-  el.classList.add('active');
-  repeatTimer = setTimeout(()=>{ repeatInterval = setInterval(()=> moveOnce(dir), 55); }, 220);
-}
-function stopRepeat(el){
-  el.classList.remove('active');
-  clearTimeout(repeatTimer); repeatTimer=null;
-  clearInterval(repeatInterval); repeatInterval=null;
-  // ツールが押下中ならストローク継続（ツール離しで commit）
-}
-dpadButtons.forEach(el=>{
-  const dir = el.dataset.dir;
-  el.addEventListener('pointerdown',(e)=>{ e.preventDefault(); startRepeat(dir, el); });
-  el.addEventListener('pointerup',  (e)=>{ e.preventDefault(); stopRepeat(el); });
-  el.addEventListener('pointercancel',(e)=>{ e.preventDefault(); stopRepeat(el); });
-  el.addEventListener('pointerleave',(e)=>{ if(!repeatInterval) el.classList.remove('active'); });
-});
-
-/* ====== 初期化 ====== */
-if(loadLS()){ redrawAll(); checkAll(); } else { redrawAll(); checkAll(); }
-function refreshButtons(){ undoBtn.disabled = undoStack.length===0; redoBtn.disabled = redoStack.length===0; }
-setInterval(refreshButtons, 300);
-boardEl.focus();
+/* ==================== 起動 ==================== */
+(function boot(){
+  // 直前のパズルを復元 or 既定
+  const last=localStorage.getItem(LS_LAST_ID);
+  loadPuzzleById(last||PUZZLES[0].id);
+  setSelected(0,0); boardEl.focus();
+  setInterval(refreshButtons, 400);
+})();
 </script>
 </body>
 </html>
