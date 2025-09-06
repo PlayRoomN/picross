@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Picross 20×20 — 同一UI（PC/Tablet/Phone）</title>
+<title>Picross 20×20</title>
 <style>
   :root{
     --cell:32px;      /* セル基本サイズ（スライダで変更可／初期は自動フィットで上書き） */
@@ -282,7 +282,7 @@ let rowClues=[], colClues=[];
 let player = Array.from({length:ROWS},()=>Array(COLS).fill(0)); // 0空/1黒/2×
 let cells=[];
 let selR=0, selC=0, prevSelR=0, prevSelC=0;
-let currentId = PUZZLES[0].id;
+let currentId = null;
 
 const undoStack=[], redoStack=[];
 function snapshot(){return JSON.stringify(player)}
