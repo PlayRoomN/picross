@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Picross 20×20</title>
+<title>Picross 20×20 — 同一UI（PC/Tablet/Phone）</title>
 <style>
   :root{
     --cell:32px;      /* セル基本サイズ（スライダで変更可／初期は自動フィットで上書き） */
@@ -85,25 +85,20 @@
     border-top:1px solid #e5e5e5; padding:.5rem; display:flex; justify-content:center
   }
   .pad{
-    display:flex; gap:14px; align-items:center; flex-wrap:wrap; max-width:960px; width:100%; justify-content:space-between
+    display:flex; gap:14px; align-items:center; flex-wrap:wrap; /* width is set by JS for alignment */
   }
   .dpad{
-    display:grid; grid-template-columns:48px 48px 48px; grid-template-rows:48px 48px 48px; gap:6px
+    display:flex; align-items:center; gap:6px
   }
-  .dpad .btn{border-radius:12px; font-size:18px}
-  .dpad .sp{visibility:hidden}
+  .dpad-center{display:flex; flex-direction:column; gap:6px}
+  .dpad .btn{width:76px; height:76px; border-radius:12px; font-size:22px}
   .act{
     display:flex; gap:8px; align-items:center; flex-wrap:wrap
   }
   .key{
-    width:64px; height:48px; border-radius:12px; font-weight:800; font-size:18px
+    width:84px; height:84px; border-radius:12px; font-weight:800; font-size:24px
   }
-  .key.fill{background:#111; color:#fff}
   .key.x{color:#444}
-  .key.clear{background:#fff}
-  .util{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
-  .meter{min-width:90px; text-align:center; font-weight:700}
-
   /* ダイアログ */
   dialog{border:none; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.25); padding:16px 18px; max-width:min(720px,92vw)}
   dialog::backdrop{background:rgba(0,0,0,.25)}
@@ -145,6 +140,7 @@
     <span class="seg"></span>
     <button id="undoBtn" class="btn" title="取り消し (Ctrl+Z)" disabled>Undo</button>
     <button id="redoBtn" class="btn" title="やり直し (Ctrl+Y)" disabled>Redo</button>
+    <button id="resetBtn" class="btn">リセット</button>
     <span class="seg"></span>
     <div class="range-wrap">
       <label for="cellSlider">サイズ</label>
@@ -152,13 +148,11 @@
       <span id="cellPx" class="stat">32px</span>
     </div>
     <span class="seg"></span>
-    <span id="progress" class="stat">一致率: 0%</span>
-    <span class="seg"></span>
     <button id="helpBtn" class="btn">遊び方</button>
   </div>
 
   <div class="stage">
-    <div class="wrap">
+    <div id="wrap" class="wrap">
       <div class="corner"></div>
       <div class="top" id="top"></div>
       <div class="left" id="left"></div>
@@ -167,31 +161,21 @@
   </div>
 
   <div class="control">
-    <div class="pad">
+    <div id="pad" class="pad">
       <div class="dpad">
-        <button class="btn sp" aria-hidden="true"></button>
-        <button id="upBtn" class="btn" aria-label="上へ">▲</button>
-        <button class="btn sp" aria-hidden="true"></button>
-
         <button id="leftBtn" class="btn" aria-label="左へ">◀</button>
-        <button id="okBtn" class="btn" aria-label="黒を置く">●</button>
+        <div class="dpad-center">
+          <button id="upBtn" class="btn" aria-label="上へ">▲</button>
+          <button id="downBtn" class="btn" aria-label="下へ">▼</button>
+        </div>
         <button id="rightBtn" class="btn" aria-label="右へ">▶</button>
-
-        <button class="btn sp" aria-hidden="true"></button>
-        <button id="downBtn" class="btn" aria-label="下へ">▼</button>
-        <button class="btn sp" aria-hidden="true"></button>
       </div>
+
+      <div class="grow"></div>
 
       <div class="act">
-        <button id="fillBtn" class="btn key fill" title="黒 (Space/Enter)">●</button>
+        <button id="fillBtn" class="btn key" title="黒 (Space/Enter)">■</button>
         <button id="xBtn" class="btn key x" title="× (X)">×</button>
-        <button id="clearBtn" class="btn key clear" title="解除 (C)">□</button>
-      </div>
-
-      <div class="util">
-        <div class="meter" id="meter">0,0</div>
-        <button id="checkBtn" class="btn">チェック</button>
-        <button id="resetBtn" class="btn">リセット</button>
       </div>
     </div>
   </div>
@@ -264,17 +248,15 @@ function strToGrid(lines){ // 20行の'.#'を0/1へ
 }
 
 /* ==================== DOM取得 ==================== */
-const topEl=byId('top'), leftEl=byId('left'), boardEl=byId('board');
-const progressEl=byId('progress'), meterEl=byId('meter');
+const topEl=byId('top'), leftEl=byId('left'), boardEl=byId('board'), wrapEl=byId('wrap'), padEl=byId('pad');
 const undoBtn=byId('undoBtn'), redoBtn=byId('redoBtn'), resetBtn=byId('resetBtn');
-const checkBtn=byId('checkBtn');
 const newBtn=byId('newBtn'), randBtn=byId('randBtn'), listBtn=byId('listBtn');
 const helpBtn=byId('helpBtn'), helpDlg=byId('helpDlg'), helpClose=byId('helpClose');
 const listDlg=byId('listDlg'), listWrap=byId('listWrap'), listClose=byId('listClose');
 const cellSlider=byId('cellSlider'), cellPx=byId('cellPx');
 
-const upBtn=byId('upBtn'), downBtn=byId('downBtn'), leftBtn=byId('leftBtn'), rightBtn=byId('rightBtn'), okBtn=byId('okBtn');
-const fillBtn=byId('fillBtn'), xBtn=byId('xBtn'), clearBtn=byId('clearBtn');
+const upBtn=byId('upBtn'), downBtn=byId('downBtn'), leftBtn=byId('leftBtn'), rightBtn=byId('rightBtn');
+const fillBtn=byId('fillBtn'), xBtn=byId('xBtn');
 
 /* ==================== 状態 ==================== */
 let solution = Array.from({length:ROWS},()=>Array(COLS).fill(0));
@@ -366,7 +348,6 @@ function setSelected(r,c){
   prevSelR=selR; prevSelC=selC; selR=r; selC=c;
   cells[r][c].classList.add('selected');
   updateRowColHL();
-  meterEl.textContent = `${selR+1},${selC+1}`;
 }
 function updateRowColHL(){
   const topHints=[...topEl.children], leftHints=[...leftEl.children];
@@ -446,17 +427,13 @@ boardEl.addEventListener('keydown',e=>{
     if(!holding){ holding=true; strokeAction=(player[selR][selC]===0)?'x':'clear'; beginStroke(strokeAction); applyCell(selR,selC,strokeAction); }
     return;
   }
-  if(e.key.toLowerCase()==='c'){ e.preventDefault();
-    if(!holding){ holding=true; strokeAction='clear'; beginStroke(strokeAction); applyCell(selR,selC,strokeAction); }
-    return;
-  }
   if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); beginStroke('clear'); applyCell(selR,selC,'clear'); commitStroke(); return; }
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){ e.preventDefault(); doUndo(); return; }
   if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='y'){ e.preventDefault(); doRedo(); return; }
   if(e.key==='Escape'){ if(holding){ holding=false; commitStroke(); } return; }
 });
 window.addEventListener('keyup',e=>{
-  if((e.key===' '||e.key==='Enter'||e.key.toLowerCase()==='x'||e.key.toLowerCase()==='c') && holding){
+  if((e.key===' '||e.key==='Enter'||e.key.toLowerCase()==='x') && holding){
     holding=false; commitStroke();
   }
 });
@@ -481,11 +458,9 @@ withRepeat(upBtn,   ()=>{ setSelected(Math.max(0,selR-1),selC); if(holding && st
 withRepeat(downBtn, ()=>{ setSelected(Math.min(ROWS-1,selR+1),selC); if(holding && strokeActive){ applyCell(selR,selC,strokeAction);} });
 withRepeat(leftBtn, ()=>{ setSelected(selR,Math.max(0,selC-1)); if(holding && strokeActive){ applyCell(selR,selC,strokeAction);} });
 withRepeat(rightBtn,()=>{ setSelected(selR,Math.min(COLS-1,selC+1)); if(holding && strokeActive){ applyCell(selR,selC,strokeAction);} });
-okBtn.addEventListener('click', ()=>{ beginStroke('smart'); const cur=player[selR][selC]; const act=(cur===0)?'fill':'clear'; applyCell(selR,selC,act); commitStroke(); });
 
 withRepeat(fillBtn,  ()=>{ holding=true; strokeAction=(player[selR][selC]===0)?'fill':'clear'; if(!strokeActive) beginStroke(strokeAction); applyCell(selR,selC,strokeAction); });
 withRepeat(xBtn,     ()=>{ holding=true; strokeAction=(player[selR][selC]===0)?'x':'clear';    if(!strokeActive) beginStroke(strokeAction); applyCell(selR,selC,strokeAction); });
-withRepeat(clearBtn, ()=>{ holding=true; strokeAction='clear';                                if(!strokeActive) beginStroke(strokeAction); applyCell(selR,selC,strokeAction); });
 
 /* ==================== エラー/達成チェック ==================== */
 function getLineValues(isRow, idx){
@@ -666,22 +641,11 @@ function triggerCelebrate(){
 
 function checkSolved(){
   for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
-    if((solution[r][c]===1)!==(player[r][c]===1)){ progressEl.textContent=getProgressText(); return; }
+    if((solution[r][c]===1)!==(player[r][c]===1)){ return; }
   }
-  progressEl.textContent="クリア！";
   if(!celebrated){ celebrated=true; triggerCelebrate(); }
 }
-function checkAll(){ checkClues(); checkSolved(); progressEl.textContent=getProgressText(); }
-
-function getProgressText(){
-  let correct=0,total=ROWS*COLS;
-  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
-    const need=solution[r][c]===1, put=player[r][c]===1;
-    if(need===put) correct++;
-  }
-  const pct=Math.round((correct/total)*100);
-  return `一致率: ${pct}%`;
-}
+function checkAll(){ checkClues(); checkSolved(); }
 
 /* ==================== パズル切替 & 保存 ==================== */
 function loadPuzzleById(id){
@@ -690,8 +654,8 @@ function loadPuzzleById(id){
   solution = strToGrid(p.art);
   buildClues(); drawHints(); buildBoard();
   if(loadLS()){ /* loaded */ } else { player=Array.from({length:ROWS},()=>Array(COLS).fill(0)); }
-  redrawAll(); setSelected(0,0); checkAll();
-  celebrated=false; progressEl.textContent=getProgressText(); saveLS(); localStorage.setItem(LS_LAST_ID,currentId);
+  redrawAll(); setSelected(0,0); checkAll(); celebrated=false;
+  saveLS(); localStorage.setItem(LS_LAST_ID,currentId);
 }
 function randomPuzzle(){
   const idx = Math.floor(Math.random()*PUZZLES.length);
@@ -717,7 +681,6 @@ resetBtn.onclick=()=>{
   beginStroke('clear-all'); for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ if(player[r][c]!==0){ player[r][c]=0; updateCell(r,c); } }
   commitStroke(); celebrated=false; checkAll(); saveLS();
 };
-checkBtn.onclick=()=>{ progressEl.textContent=getProgressText(); };
 newBtn.onclick=()=>{ loadPuzzleById(currentId); };
 randBtn.onclick=()=>{ randomPuzzle(); };
 helpBtn.onclick=()=> helpDlg.showModal();
@@ -740,7 +703,17 @@ listBtn.onclick=()=>{
 listClose.onclick = ()=> listDlg.close();
 
 /* セルサイズ（手動スライダ） */
-function applyCellSize(px){ document.documentElement.style.setProperty('--cell', px+'px'); cellPx.textContent=px+'px'; }
+function syncControlWidth(){
+  // 盤面(.wrap)の幅を取得し、操作パネル(.pad)の幅をそれに合わせる
+  requestAnimationFrame(()=>{
+    if(!wrapEl || !padEl) return;
+    padEl.style.width = wrapEl.offsetWidth + 'px';
+  });
+}
+function applyCellSize(px){
+  document.documentElement.style.setProperty('--cell', px+'px'); cellPx.textContent=px+'px';
+  syncControlWidth();
+}
 (function initCellSize(){
   const saved=parseInt(localStorage.getItem(LS_CELL_KEY)||"",10);
   const init=Number.isFinite(saved)? clamp(saved,24,46) : 32;
@@ -807,6 +780,7 @@ function fitInitialView(){
   // 初期表示：盤面＋行列ヒントが必ず見えるよう自動フィット
   requestAnimationFrame(()=>fitInitialView());
 
+  window.addEventListener('resize', syncControlWidth);
   setInterval(refreshButtons, 400);
 })();
 
