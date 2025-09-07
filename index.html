@@ -82,7 +82,8 @@
   /* 操作パネル（常設） */
   .control{
     position:sticky; bottom:0; z-index:9; background:var(--ui-bg); backdrop-filter:saturate(1.2) blur(2px);
-    border-top:1px solid #e5e5e5; padding:.5rem; display:flex; justify-content:center
+    border-top:1px solid #e5e5e5; padding:.5rem; display:flex; justify-content:center;
+    user-select:none; touch-action:manipulation; /* テキスト選択とダブルタップズームを抑制 */
   }
   .pad{
     display:flex; gap:14px; align-items:center; flex-wrap:wrap; /* width is set by JS for alignment */
@@ -473,34 +474,68 @@ window.addEventListener('keyup',e=>{
 });
 
 /* D-Pad 長押しオートリピート */
-function withRepeat(el, onFire){
-  let timer=null, rep=null;
-  const fire=()=>onFire();
-  el.addEventListener('pointerdown', e=>{
-    e.preventDefault(); fire();
-    timer=setTimeout(()=>{ rep=setInterval(fire, REPEAT_STEP); }, REPEAT_DELAY); // 連続移動開始
-  });
-  const stop=()=>{
-    clearTimeout(timer); timer=null; clearInterval(rep); rep=null;
-    // D-Padから指を離しても武装は解除しない。アクションボタンが押されている限り有効。
-    // ストロークのコミットもアクションボタン側やグローバルなupイベントに任せる。
-  };
-  el.addEventListener('pointerup',stop);
-  el.addEventListener('pointercancel',stop);
-  el.addEventListener('pointerleave',stop);
+const dpadState = {
+  timer: null,
+  interval: null,
+  direction: null, // 'up', 'down', 'left', 'right'
+  isPressed: false,
+};
+
+function dpadMove() {
+  if (!dpadState.direction) return;
+  
+  let r = selR, c = selC;
+  switch (dpadState.direction) {
+    case 'up':    r = Math.max(0, selR - 1); break;
+    case 'down':  r = Math.min(ROWS - 1, selR + 1); break;
+    case 'left':  c = Math.max(0, selC - 1); break;
+    case 'right': c = Math.min(COLS - 1, selC + 1); break;
+  }
+  setSelected(r, c);
+  if (armed) {
+    applyCell(selR, selC, currentAction);
+  }
 }
-withRepeat(upBtn,   ()=>{ setSelected(Math.max(0,selR-1),selC); if(armed) applyCell(selR,selC,currentAction); });
-withRepeat(downBtn, ()=>{ setSelected(Math.min(ROWS-1,selR+1),selC); if(armed) applyCell(selR,selC,currentAction); });
-withRepeat(leftBtn, ()=>{ setSelected(selR,Math.max(0,selC-1)); if(armed) applyCell(selR,selC,currentAction); });
-withRepeat(rightBtn,()=>{ setSelected(selR,Math.min(COLS-1,selC+1)); if(armed) applyCell(selR,selC,currentAction); });
+
+function startDpadRepeat(direction) {
+  const isContinuing = dpadState.isPressed;
+  
+  clearTimeout(dpadState.timer);
+  clearInterval(dpadState.interval);
+
+  dpadState.direction = direction;
+  dpadState.isPressed = true;
+
+  dpadMove();
+
+  const delay = isContinuing ? 0 : REPEAT_DELAY;
+  dpadState.timer = setTimeout(() => {
+    dpadState.interval = setInterval(dpadMove, REPEAT_STEP);
+  }, delay);
+}
+
+function stopDpadRepeat() {
+  clearTimeout(dpadState.timer);
+  clearInterval(dpadState.interval);
+  dpadState.timer = null;
+  dpadState.interval = null;
+  dpadState.direction = null;
+  dpadState.isPressed = false;
+}
+
+const dpadButtons = { up: upBtn, down: downBtn, left: leftBtn, right: rightBtn };
+for (const [direction, button] of Object.entries(dpadButtons)) {
+  button.addEventListener('pointerdown', e => { e.preventDefault(); startDpadRepeat(direction); });
+  button.addEventListener('pointerenter', e => { if (e.buttons === 1 && dpadState.isPressed) { startDpadRepeat(direction); } });
+}
 
 // アクションボタンは「押しっぱなしで武装」するモードへ変更
 fillBtn.addEventListener('pointerdown', e => { e.preventDefault(); boardEl.focus(); arm((player[selR][selC]===0)?'fill':'clear'); applyCell(selR,selC,currentAction); });
 xBtn.addEventListener('pointerdown', e => { e.preventDefault(); boardEl.focus(); arm((player[selR][selC]===0)?'x':'clear'); applyCell(selR,selC,currentAction); });
 
 // グローバルなポインタアップで武装解除（どのボタンから指が離れてもOK）
-window.addEventListener('pointerup', e => { if(armed) disarm(); if(e.pointerId) boardEl.releasePointerCapture?.(e.pointerId); });
-window.addEventListener('pointercancel', e => { if(armed) disarm(); if(e.pointerId) boardEl.releasePointerCapture?.(e.pointerId); });
+window.addEventListener('pointerup', e => { if(dpadState.isPressed) stopDpadRepeat(); if(armed) disarm(); if(e.pointerId) boardEl.releasePointerCapture?.(e.pointerId); });
+window.addEventListener('pointercancel', e => { if(dpadState.isPressed) stopDpadRepeat(); if(armed) disarm(); if(e.pointerId) boardEl.releasePointerCapture?.(e.pointerId); });
 
 /* ==================== エラー/達成チェック ==================== */
 function getLineValues(isRow, idx){
