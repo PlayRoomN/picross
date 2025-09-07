@@ -27,9 +27,10 @@
   }
   .title{font-weight:700; font-size:1rem; margin-right:.25rem}
   .btn{
-    padding:.35rem .6rem; border:1px solid var(--ui-br);
-    background:#fff; border-radius:8px; cursor:pointer
-  }
+  padding:.35rem .6rem; border:1px solid var(--ui-br);
+  background:#fff; border-radius:8px; cursor:pointer;
+  touch-action: manipulation; /* ★追記：ダブルタップズーム抑止 */
+}
   .btn:disabled{opacity:.5; cursor:not-allowed}
   .stat{font-size:.9rem; color:#333}
   .seg{width:1px; height:22px; background:#e5e5e5; margin:0 .25rem}
@@ -273,7 +274,7 @@ let currentId = null; // 現在のパズルID
 
 let armed = false; // 描画モードがONか（アクションボタン押しっぱなし等）
 let currentAction = 'none'; // 'fill', 'x', 'clear'
-
+let actionPointerId = null; // ★追加：武装（arm）を開始した指の pointerId を保持
 
 const undoStack=[], redoStack=[];
 function snapshot(){return JSON.stringify(player)}
@@ -530,12 +531,38 @@ for (const [direction, button] of Object.entries(dpadButtons)) {
 }
 
 // アクションボタンは「押しっぱなしで武装」するモードへ変更
-fillBtn.addEventListener('pointerdown', e => { e.preventDefault(); boardEl.focus(); arm((player[selR][selC]===0)?'fill':'clear'); applyCell(selR,selC,currentAction); });
-xBtn.addEventListener('pointerdown', e => { e.preventDefault(); boardEl.focus(); arm((player[selR][selC]===0)?'x':'clear'); applyCell(selR,selC,currentAction); });
+fillBtn.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  actionPointerId = e.pointerId; // ★追加
+  boardEl.focus();
+  arm((player[selR][selC]===0)?'fill':'clear');
+  applyCell(selR,selC,currentAction);
+});
+xBtn.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  actionPointerId = e.pointerId; // ★追加
+  boardEl.focus();
+  arm((player[selR][selC]===0)?'x':'clear');
+  applyCell(selR,selC,currentAction);
+});
 
 // グローバルなポインタアップで武装解除（どのボタンから指が離れてもOK）
-window.addEventListener('pointerup', e => { if(dpadState.isPressed) stopDpadRepeat(); if(armed) disarm(); if(e.pointerId) boardEl.releasePointerCapture?.(e.pointerId); });
-window.addEventListener('pointercancel', e => { if(dpadState.isPressed) stopDpadRepeat(); if(armed) disarm(); if(e.pointerId) boardEl.releasePointerCapture?.(e.pointerId); });
+window.addEventListener('pointerup', e => {
+  // 「■/×」を押している指が離れたときだけ disarm
+  if (e.pointerId === actionPointerId) {
+    actionPointerId = null;
+    if (armed) disarm();
+  }
+  if (e.pointerId) boardEl.releasePointerCapture?.(e.pointerId);
+});
+window.addEventListener('pointercancel', e => {
+  if (e.pointerId === actionPointerId) {
+    actionPointerId = null;
+    if (armed) disarm();
+  }
+  if (e.pointerId) boardEl.releasePointerCapture?.(e.pointerId);
+});
+
 
 /* ==================== エラー/達成チェック ==================== */
 function getLineValues(isRow, idx){
