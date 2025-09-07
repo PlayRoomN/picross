@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Picross 20×20 — 同一UI（PC/Tablet/Phone）</title>
 <style>
   :root{
@@ -528,6 +528,9 @@ const dpadButtons = { up: upBtn, down: downBtn, left: leftBtn, right: rightBtn }
 for (const [direction, button] of Object.entries(dpadButtons)) {
   button.addEventListener('pointerdown', e => { e.preventDefault(); startDpadRepeat(direction); });
   button.addEventListener('pointerenter', e => { if (e.buttons === 1 && dpadState.isPressed) { startDpadRepeat(direction); } });
+　button.addEventListener('pointerup',      () => stopDpadRepeat());   // ★追加
+　button.addEventListener('pointercancel',  () => stopDpadRepeat());   // ★追加
+　button.addEventListener('pointerleave',   () => stopDpadRepeat());   // ★追加
 }
 
 // アクションボタンは「押しっぱなしで武装」するモードへ変更
@@ -548,6 +551,7 @@ xBtn.addEventListener('pointerdown', e => {
 
 // グローバルなポインタアップで武装解除（どのボタンから指が離れてもOK）
 window.addEventListener('pointerup', e => {
+  if (dpadState.isPressed) stopDpadRepeat();  // ★追記：安全装置（必ずリピート停止）
   // 「■/×」を押している指が離れたときだけ disarm
   if (e.pointerId === actionPointerId) {
     actionPointerId = null;
@@ -556,6 +560,7 @@ window.addEventListener('pointerup', e => {
   if (e.pointerId) boardEl.releasePointerCapture?.(e.pointerId);
 });
 window.addEventListener('pointercancel', e => {
+  if (dpadState.isPressed) stopDpadRepeat();  // ★追記：安全装置（必ずリピート停止）
   if (e.pointerId === actionPointerId) {
     actionPointerId = null;
     if (armed) disarm();
